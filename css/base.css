@@ -1,0 +1,103 @@
+/* O Conclave — visual neon escuro (compartilhado entre os dois apps) */
+:root {
+  --fundo: #0b0b14;
+  --fundo-2: #12121f;
+  --cartao: #181828;
+  --borda: #2a2a42;
+  --texto: #ecebff;
+  --texto-2: #9d9cc0;
+  --destaque: #8b5cf6;           /* roxo neon (sem facção) */
+  --ok: #22c55e;
+  --alerta: #f59e0b;
+  --perigo: #ef4444;
+  --raio: 14px;
+  /* Cores das facções (o Esquadrão não é mais amarelo: colidia com o dourado) */
+  --guilda: #ff4d6d;
+  --frequencia: #38bdf8;
+  --esquadrao: #a3e635;
+}
+body[data-faccao="guilda"]     { --destaque: var(--guilda); }
+body[data-faccao="frequencia"] { --destaque: var(--frequencia); }
+body[data-faccao="esquadrao"]  { --destaque: var(--esquadrao); }
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--fundo); color: var(--texto);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+h1, h2, h3 { margin: 0 0 .4em; line-height: 1.2; }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.2rem; } h3 { font-size: 1rem; }
+small, .sub { color: var(--texto-2); }
+a { color: var(--destaque); }
+code { background: var(--fundo-2); padding: 1px 6px; border-radius: 6px; }
+
+.cartao {
+  background: var(--cartao); border: 1px solid var(--borda);
+  border-radius: var(--raio); padding: 16px; margin-bottom: 12px;
+}
+.cartao.aviso { border-color: var(--alerta); }
+.linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.grade { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+
+label { display: block; font-size: .85rem; color: var(--texto-2); margin-bottom: 12px; }
+input, select, textarea {
+  width: 100%; margin-top: 4px; padding: 12px; font: inherit; color: var(--texto);
+  background: var(--fundo-2); border: 1px solid var(--borda); border-radius: 10px;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--destaque); border-color: transparent; }
+input[type=checkbox] { width: auto; margin: 0 8px 0 0; }
+
+.botao {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 12px 16px; font: inherit; font-weight: 600; cursor: pointer;
+  color: var(--texto); background: var(--fundo-2); border: 1px solid var(--borda);
+  border-radius: 10px; min-height: 44px;
+}
+.botao:hover { border-color: var(--destaque); }
+.botao:disabled { opacity: .5; cursor: not-allowed; }
+.botao.primario { background: var(--destaque); border-color: var(--destaque); color: #0b0b14; width: 100%; }
+body[data-faccao="guilda"] .botao.primario, body[data-faccao="frequencia"] .botao.primario,
+body[data-faccao="esquadrao"] .botao.primario { color: #0b0b14; }
+.botao.perigo { color: var(--perigo); border-color: var(--perigo); }
+.botao.pequeno { padding: 6px 12px; min-height: 34px; font-size: .85rem; }
+.botao.link { background: none; border: 0; color: var(--destaque); width: 100%; }
+
+.chip { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: .75rem; font-weight: 600;
+  background: var(--fundo-2); border: 1px solid var(--borda); }
+.chip.pendente { color: var(--alerta); border-color: var(--alerta); }
+.chip.preparando { color: var(--frequencia); border-color: var(--frequencia); }
+.chip.pronto { color: var(--ok); border-color: var(--ok); }
+.chip.entregue { color: var(--texto-2); }
+.chip.guilda { color: var(--guilda); border-color: var(--guilda); }
+.chip.frequencia { color: var(--frequencia); border-color: var(--frequencia); }
+.chip.esquadrao { color: var(--esquadrao); border-color: var(--esquadrao); }
+
+.barra { height: 10px; background: var(--fundo-2); border-radius: 999px; overflow: hidden; }
+.barra > i { display: block; height: 100%; background: var(--destaque); box-shadow: 0 0 12px var(--destaque); }
+
+/* Login */
+.login { max-width: 380px; margin: 0 auto; padding: 48px 16px; text-align: center; }
+.login form { text-align: left; }
+.logo-grande { font-size: 3rem; filter: drop-shadow(0 0 14px var(--destaque)); }
+
+/* Modal */
+#modal { display: none; position: fixed; inset: 0; z-index: 50; }
+#modal.aberto { display: block; }
+.modal-fundo { position: absolute; inset: 0; background: rgba(0, 0, 0, .7); }
+.modal-caixa {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(94vw, 520px); max-height: 88vh; overflow: auto;
+  background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); padding: 20px;
+}
+
+/* Avisos */
+#toasts { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 60; display: grid; gap: 8px; width: min(92vw, 420px); }
+.toast { padding: 12px 14px; border-radius: 10px; background: var(--cartao); border: 1px solid var(--ok); }
+.toast.erro { border-color: var(--perigo); }
+
+.vazio { text-align: center; color: var(--texto-2); padding: 32px 0; }
+.preco { font-weight: 700; }
+.preco small { font-weight: 400; }
+[hidden] { display: none !important; }

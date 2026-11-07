@@ -1,0 +1,19 @@
+/* App do FUNCIONÁRIO — tablet/celular, botões grandes */
+#app { max-width: 1100px; margin: 0 auto; padding: 0 16px 40px; }
+.barra-topo { position: sticky; top: 0; z-index: 10; background: var(--fundo); padding: 12px 0; border-bottom: 1px solid var(--borda); margin-bottom: 14px; }
+.abas { display: flex; gap: 8px; overflow-x: auto; margin-top: 10px; }
+.abas .botao.ativo { background: var(--destaque); border-color: var(--destaque); color: #0b0b14; }
+.painel { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); align-items: start; }
+.comanda h2 { margin: 0; }
+.linha-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--borda); }
+.linha-item:first-of-type { border-top: 0; }
+.detalhe { font-size: .85rem; color: var(--alerta); }
+.ticket { border-left: 4px solid var(--alerta); }
+.ticket.preparando { border-left-color: var(--frequencia); }
+.ticket.pronto { border-left-color: var(--ok); }
+.tabela { width: 100%; border-collapse: collapse; }
+.tabela th, .tabela td { text-align: left; padding: 8px; border-bottom: 1px solid var(--borda); font-size: .9rem; }
+.tabela input, .tabela select { margin: 0; padding: 8px; }
+.pacotes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 8px 0 12px; }
+.resultado-busca { max-height: 200px; overflow: auto; }
+.resultado-busca .botao { width: 100%; justify-content: space-between; margin-bottom: 6px; }
