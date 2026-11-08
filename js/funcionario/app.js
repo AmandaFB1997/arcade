@@ -1,7 +1,7 @@
 // App do FUNCIONÁRIO — O Conclave (salão, cozinha e administração)
 import { sb, configurado, $, $$, esc, fmtNum, fmtReais, fmtAC, toast, abrirModal, fecharModal, avisoSemConfig,
          comTrava, erroAmigavel, tempoDecorrido, contem, partir, NOME_FACCAO } from '../nucleo.js';
-import { sessaoAtual, montarLogin, sair } from '../auth.js';
+import { sessaoAtual, montarLogin, sair, validarSenha } from '../auth.js';
 
 const raiz = document.getElementById('app');
 const ok = r => { if (r.error) throw r.error; return r.data; };
@@ -28,7 +28,7 @@ function desenhar() {
     raiz.innerHTML = `
       <header class="barra-topo">
         <div class="linha"><strong>⚔️ O Conclave · Equipe</strong>
-          <span><small>${esc(E.perfil.nome_exibicao)}</small> <button class="botao pequeno" data-acao="sair">Sair</button></span></div>
+          <span><small>${esc(E.perfil.nome_exibicao)}</small> <button class="botao pequeno" data-acao="senha">Senha</button> <button class="botao pequeno" data-acao="sair">Sair</button></span></div>
         <nav class="abas" id="abas"></nav>
       </header>
       <main id="conteudo"></main>`;
@@ -300,6 +300,25 @@ raiz.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   const d = b.dataset;
   if (d.acao === 'sair') return sair();
+  if (d.acao === 'senha') {
+    const m = abrirModal(`<h2>Trocar senha</h2>
+      <form id="f-senha"><label>Nova senha<input name="senha" type="password" minlength="8" autocomplete="new-password" required></label>
+      <p class="sub">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo (* ! @ #). Sem sequências como 123 ou abc.</p>
+      <button class="botao primario" type="submit">Salvar senha</button>
+      <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Cancelar</button></form>`);
+    m.querySelector('#f-senha').addEventListener('submit', ev => {
+      ev.preventDefault();
+      comTrava(ev.target.querySelector('button[type=submit]'), async () => {
+        const senha = new FormData(ev.target).get('senha');
+        const faltas = validarSenha(senha, E.user?.email || '');
+        if (faltas.length) throw new Error('Senha fraca. Falta: ' + faltas.join('; ') + '.');
+        const { error } = await sb.auth.updateUser({ password: senha });
+        if (error) throw error;
+        fecharModal(); toast('Senha salva.');
+      });
+    });
+    return;
+  }
   if (d.aba) { E.aba = d.aba; return desenhar(); }
   if (d.sub) { E.subAdmin = d.sub; return desenhar(); }
   if (d.recarga !== undefined) { const [id, n] = partir(d.recarga); return modalRecarga(id || '', n || ''); }

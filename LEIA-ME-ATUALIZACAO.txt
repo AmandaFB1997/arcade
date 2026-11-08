@@ -11,10 +11,8 @@ O QUE TEM DE NOVO
 - NOVO: investidores (Covil do Dragão): cotas, rendimento mensal em AC e buff de XP; Admin > Pacotes e Admin > Investidores
 
 PARTE 1 — COLOCAR O SITE NO AR (obrigatório, 5 minutos)
-1) SQL Editor do projeto arcade, rodar nesta ordem, um por vez (só os que ainda não rodou):
-   sql/03_ajuste_moeda_1ac_1real.sql
-   sql/04_cadastro_pesquisa_jogador.sql
-   sql/05_pix_whatsapp_investidores.sql
+1) SQL Editor do projeto arcade: abra o arquivo sql/atualizar_tudo.sql, copie TUDO, cole e clique em Run. (Uma vez só; se rodar de novo, não dá erro.)
+   NÃO rode o 01_banco_completo.sql de novo (dá "type faccao already exists" — é inofensivo, mas desnecessário).
 2) GitHub > repositório arcade > Add file > Upload files: arrastar o CONTEÚDO da pasta descompactada
    (css, js, sql, supabase, cliente, funcionario, index.html, README.md) e fazer o commit.
 3) Seu admin (SQL Editor):

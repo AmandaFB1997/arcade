@@ -19,9 +19,12 @@ Deno.serve(async (req) => {
   const bruto = await req.text();
   let carga: { user: { phone: string }; sms: { otp: string } };
   try {
-    const segredo = Deno.env.get('SEND_SMS_HOOK_SECRET')!.replace('v1,whsec_', '');
+    const segredo = (Deno.env.get('SEND_SMS_HOOK_SECRET') ?? '').trim().replace('v1,whsec_', '').replace('whsec_', '');
+    if (!segredo) throw new Error('SEND_SMS_HOOK_SECRET não está definido nesta função');
     carga = new Webhook(segredo).verify(bruto, Object.fromEntries(req.headers)) as typeof carga;
-  } catch {
+  } catch (e) {
+    console.error('DIAGNOSTICO 401:', String(e), '| cabecalhos:', [...req.headers.keys()].join(','),
+      '| tamanho do segredo:', (Deno.env.get('SEND_SMS_HOOK_SECRET') ?? '').length);
     return new Response(JSON.stringify({ error: { http_code: 401, message: 'assinatura inválida' } }), { status: 401 });
   }
   try {

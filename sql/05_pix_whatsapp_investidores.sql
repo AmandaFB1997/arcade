@@ -41,11 +41,14 @@ create index if not exists pedidos_recarga_usuario on public.pedidos_recarga (us
 
 alter table public.pacotes_recarga enable row level security;
 alter table public.pedidos_recarga enable row level security;
+drop policy if exists pacotes_leitura on public.pacotes_recarga;
 create policy pacotes_leitura on public.pacotes_recarga for select to authenticated
   using (ativo or public.tem_papel('admin'));
+drop policy if exists pacotes_admin on public.pacotes_recarga;
 create policy pacotes_admin on public.pacotes_recarga for all to authenticated
   using (public.tem_papel('admin')) with check (public.tem_papel('admin'));
 -- pedido: o cliente só LÊ os próprios; quem cria/confirma é o servidor (Edge Function)
+drop policy if exists pedidos_leitura on public.pedidos_recarga;
 create policy pedidos_leitura on public.pedidos_recarga for select to authenticated
   using (usuario_id = auth.uid() or public.eh_funcionario());
 
@@ -66,7 +69,9 @@ end $$;
 revoke all on function public.confirmar_recarga_pix(uuid, text, numeric) from public, anon, authenticated;
 grant execute on function public.confirmar_recarga_pix(uuid, text, numeric) to service_role;
 
-alter publication supabase_realtime add table public.pedidos_recarga;
+do $$ begin
+  alter publication supabase_realtime add table public.pedidos_recarga;
+exception when duplicate_object then null; end $$;
 
 -- ---------- 2) Perfil também para login por WhatsApp (sem e-mail) ----------
 create or replace function public.criar_perfil_novo_usuario()
@@ -103,8 +108,10 @@ create table if not exists public.rendimentos_investidor (
 );
 alter table public.cotas_investidor enable row level security;
 alter table public.rendimentos_investidor enable row level security;
+drop policy if exists cotas_leitura on public.cotas_investidor;
 create policy cotas_leitura on public.cotas_investidor for select to authenticated
   using (usuario_id = auth.uid() or public.tem_papel('admin'));
+drop policy if exists rendimentos_leitura on public.rendimentos_investidor;
 create policy rendimentos_leitura on public.rendimentos_investidor for select to authenticated
   using (usuario_id = auth.uid() or public.tem_papel('admin'));
 

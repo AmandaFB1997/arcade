@@ -173,3 +173,45 @@ button.saldo { cursor: pointer; font-size: .9rem; }
 .ponto { width: 9px; height: 9px; border-radius: 50%; background: var(--alerta); animation: pulsa 1.2s infinite; }
 .cartao.dourado { border-color: #ffc83d66; background: linear-gradient(180deg, #2a2108, var(--fundo-2)); }
 .cartao.dourado h3 { color: #ffc83d; }
+
+/* ---------- Melhorias da visão do cliente ---------- */
+.atalhos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 0 0 14px; }
+.atalhos button { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 4px; border: 1px solid var(--borda);
+  border-radius: var(--raio); background: var(--cartao); color: var(--texto); font: inherit; font-size: .78rem; cursor: pointer; }
+.atalhos button:active { transform: scale(.97); }
+.atalhos svg { width: 24px; height: 24px; color: var(--destaque); }
+.atalhos .ico-moeda { width: 24px; height: 24px; display: grid; place-items: center; border: 1.5px solid var(--destaque); border-radius: 50%;
+  color: var(--destaque); font-family: var(--mono); font-size: .62rem; font-weight: 700; }
+.secao-titulo { margin: 6px 0 8px; }
+.secao-titulo h3 { margin: 0; }
+.mini-pedido { padding: 6px 0; border-top: 1px solid var(--borda); }
+.mini-guerra { display: grid; grid-template-columns: 92px 1fr 52px; gap: 10px; align-items: center; margin-top: 10px; font-size: .85rem; }
+.mini-guerra b { text-align: right; font-family: var(--mono); font-weight: 600; }
+.mini-guerra .barra { height: 8px; }
+.mini-guerra.guilda .barra > i { background: #ff3fd8; } .mini-guerra.frequencia .barra > i { background: #29e3ff; } .mini-guerra.esquadrao .barra > i { background: #43ff8e; }
+
+.busca { width: 100%; margin: 0 0 10px; }
+.item { gap: 12px; }
+.item-icone { flex: none; width: 46px; height: 46px; display: grid; place-items: center; font-size: 1.5rem; border-radius: 12px;
+  background: var(--fundo-2); border: 1px solid var(--borda); }
+.item-corpo { flex: 1; min-width: 0; }
+.item.compacto { padding: 10px 12px; margin-bottom: 8px; }
+.item[hidden] { display: none; }
+
+.pedido { padding: 12px 0; border-top: 1px solid var(--borda); display: grid; gap: 8px; }
+.etapas { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.etapas i { height: 5px; border-radius: 3px; background: var(--borda); }
+.etapas i.feita { background: var(--destaque); box-shadow: 0 0 8px var(--destaque); }
+.total { font-size: 1.2rem; }
+.resumo .linha { padding: 4px 0; }
+.resumo .forte { border-top: 1px solid var(--borda); margin-top: 6px; padding-top: 10px; font-weight: 700; }
+.preco.negativo { color: var(--perigo); }
+
+.destaque-guerra { display: grid; gap: 4px; border-color: var(--destaque); box-shadow: 0 0 18px color-mix(in srgb, var(--destaque) 25%, transparent); }
+.cartao.guerra-linha { display: grid; gap: 8px; margin-bottom: 12px; }
+.cartao.guerra-linha.minha { border-color: var(--destaque); }
+
+.estatisticas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.estatisticas div { display: grid; gap: 2px; text-align: center; padding: 12px 4px; border: 1px solid var(--borda); border-radius: var(--raio); background: var(--cartao); }
+.estatisticas b { font-family: var(--mono); font-size: 1.2rem; }
+.estatisticas span { font-size: .72rem; color: var(--texto-2); }
