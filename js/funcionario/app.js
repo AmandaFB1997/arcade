@@ -44,6 +44,10 @@ async function atualizarContagens() {
       if (i.status === 'pronto') c.salao++;
       else c[estacaoDe(i.cardapio?.categoria)]++;
     }
+    try {
+      const m = await sb.from('sessoes_mesa').select('id', { count: 'exact', head: true }).in('status', ['solicitada', 'separando', 'pronta']);
+      if (!m.error) c.jogos = Math.max(c.jogos, 0) + (m.count || 0);
+    } catch { /* tabela ainda não existe */ }
     contagens = c;
     $$('#abas [data-aba]').forEach(b => {
       const n = contagens[b.dataset.aba] || 0, cnt = b.querySelector('.cont');
@@ -199,7 +203,14 @@ async function vEstacao(chave) {
   const todos = ok(await sb.from('itens_comanda')
     .select('*, cardapio(nome, categoria), comandas!inner(mesa, status)')
     .in('status', ['pendente', 'preparando', 'pronto']).eq('comandas.status', 'aberta').order('criado_em'));
-  const itens = todos.filter(i => estacaoDe(i.cardapio?.categoria) === chave);
+  let sessoes = [];
+  if (chave === 'jogos') {
+    const r = await sb.from('sessoes_mesa').select('*, jogos(nome), perfis(nome_exibicao), comandas(mesa), placar_mesa(jogador, pontos, ordem)')
+      .in('status', ['solicitada', 'separando', 'pronta', 'jogando']).order('criada_em');
+    sessoes = r.error ? [] : r.data;                          // sem a tabela ainda: segue sem mesas
+  }
+  const ligados = new Set(sessoes.map(x => x.item_id).filter(Boolean));
+  const itens = todos.filter(i => estacaoDe(i.cardapio?.categoria) === chave && !ligados.has(i.id));
   const col = st => itens.filter(i => i.status === st);
   const ticket = i => `
     <div class="ticket ${i.status} ${i.status === 'pendente' && Date.now() - new Date(i.criado_em) > 10 * 60000 ? 'atrasado' : ''}">
@@ -221,21 +232,62 @@ async function vEstacao(chave) {
       <div class="estacao-icone">${est.icone}</div>
       <div><h2>${est.titulo}</h2><small>${col('pendente').length} novos · ${col('preparando').length} em andamento · ${col('pronto').length} prontos</small></div>
     </div>
+    ${chave === 'jogos' ? secaoMesas(sessoes) : ''}
     ${itens.length ? `<div class="kanban">
       ${coluna('Novos', 'pendente', '#f59e0b')}${coluna('Em andamento', 'preparando', '#38bdf8')}${coluna('Prontos', 'pronto', '#22c55e')}
-    </div>` : `<p class="vazio grande">${est.vazio} 🎉</p>`}`;
+    </div>` : (chave === 'jogos' && sessoes.length ? '' : `<p class="vazio grande">${est.vazio} 🎉</p>`)}`;
+}
+
+const ROT_MESA = { solicitada: 'Novo pedido', separando: 'Separando', pronta: 'Esperando o cliente', jogando: 'Jogando' };
+function secaoMesas(sessoes) {
+  if (!sessoes.length) return '';
+  const card = m => {
+    const jogo = m.jogos?.nome || m.jogo_livre || 'Jogo a combinar';
+    const placar = (m.placar_mesa || []).slice().sort((a, b) => a.ordem - b.ordem);
+    const max = placar.length ? Math.max(...placar.map(x => x.pontos)) : 0;
+    let botao = '';
+    if (m.status === 'solicitada') botao = `<button class="botao primario" data-mesa-av="${m.id}|separando">Separar o jogo</button>`;
+    else if (m.status === 'separando') botao = `<button class="botao primario" data-mesa-pronta="${m.id}">Mesa pronta</button>`;
+    else if (m.status === 'pronta') botao = `<button class="botao primario" data-mesa-av="${m.id}|jogando">Cliente sentou</button>`;
+    return `<div class="ticket mesa-ticket ${m.status}">
+      <div class="linha"><h3>🎲 ${esc(jogo)}</h3><span class="mesa-selo">${esc(ROT_MESA[m.status])}</span></div>
+      <small>${esc(m.perfis?.nome_exibicao || 'Cliente')} · ${m.jogadores} pessoa(s) · comanda ${esc(m.comandas?.mesa || '—')}${m.mesa_jogo ? ` · <b>${esc(m.mesa_jogo)}</b>` : ''} · há ${tempoDecorrido(m.criada_em)}</small>
+      ${m.status === 'jogando' && placar.length ? `<div class="mini-placar">${placar.map(x => `<span class="${x.pontos === max && max > 0 ? 'lider' : ''}">${esc(x.jogador)} <b>${x.pontos}</b></span>`).join('')}</div>` : ''}
+      ${botao}
+      ${['solicitada', 'separando'].includes(m.status) ? `<button class="botao pequeno" style="margin-top:6px" data-mesa-av="${m.id}|cancelada">Cancelar</button>` : ''}
+    </div>`;
+  };
+  return `<section class="mesas-bloco"><h3>Mesas de jogo <b>${sessoes.length}</b></h3><div class="mesas-grade">${sessoes.map(card).join('')}</div></section>`;
+}
+
+function perguntarRotuloMesa(id) {
+  const m = abrirModal(`<h2>Mesa pronta</h2>
+    <form id="f-mesa"><label>Qual mesa foi separada?<input name="mesa" maxlength="20" placeholder="Ex.: Mesa 5" required autofocus></label>
+    <p class="sub">O cliente recebe o aviso na hora, com este nome da mesa.</p>
+    <button class="botao primario" type="submit">Avisar o cliente</button>
+    <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Cancelar</button></form>`);
+  m.querySelector('#f-mesa').addEventListener('submit', ev => {
+    ev.preventDefault();
+    comTrava(ev.target.querySelector('button[type=submit]'), async () => {
+      const rot = new FormData(ev.target).get('mesa').trim(); if (!rot) return;
+      const { error } = await sb.rpc('mesa_avancar', { _id: id, _status: 'pronta', _mesa: rot }); if (error) throw error;
+      fecharModal(); toast('Cliente avisado. 🔔'); desenhar();
+    });
+  });
 }
 
 /* ================= ADMIN ================= */
 async function vAdmin() {
   const sub = E.subAdmin;
-  const menu = `<div class="abas sub-abas" style="margin-bottom:14px">${[['cardapio', '📋 Cardápio'], ['regras', '📈 Regras e níveis'], ['pacotes', '💳 Pacotes'], ['pesquisa', '🎮 Jogadores'], ['investidores', '🐉 Investidores'], ['equipe', '👥 Equipe']]
+  const menu = `<div class="abas sub-abas" style="margin-bottom:14px">${[['cardapio', '📋 Cardápio'], ['regras', '📈 Regras e níveis'], ['pacotes', '💳 Pacotes'], ['pesquisa', '🎮 Jogadores'], ['investidores', '🐉 Investidores'], ['jogos', '🎲 Jogos'], ['partidas', '⭐ Partidas'], ['equipe', '👥 Equipe']]
     .map(([id, n]) => `<button class="botao pequeno ${sub === id ? 'ativo' : ''}" data-sub="${id}">${n}</button>`).join('')}</div>`;
   if (sub === 'cardapio') return menu + await adminCardapio();
   if (sub === 'regras') return menu + await adminRegras();
   if (sub === 'pesquisa') return menu + await adminPesquisa();
   if (sub === 'pacotes') return menu + await adminPacotes();
   if (sub === 'investidores') return menu + await adminInvestidores();
+  if (sub === 'jogos') return menu + await adminJogos();
+  if (sub === 'partidas') return menu + await adminPartidas();
   return menu + await adminEquipe();
 }
 
@@ -247,7 +299,8 @@ async function adminCardapio() {
   const itens = ok(await sb.from('cardapio').select('*').order('categoria').order('nome'));
   const linha = i => `
     <tr data-id="${i?.id || ''}">
-      <td><input data-c="nome" value="${esc(i?.nome || '')}" placeholder="Nome do item"></td>
+      <td><input data-c="nome" value="${esc(i?.nome || '')}" placeholder="Nome do item">
+        <input data-c="descricao" value="${esc(i?.descricao || '')}" placeholder="O que tem (aparece ao tocar no item)" maxlength="300" style="margin-top:4px"></td>
       <td><select data-c="categoria">${opcoesCat(i?.categoria)}</select></td>
       <td><select data-c="faccao">${opcoesFac(i?.faccao)}</select></td>
       <td><input data-c="preco_ac" type="number" min="0" step="500" value="${i?.preco_ac ?? ''}" placeholder="AC"></td>
@@ -257,6 +310,40 @@ async function adminCardapio() {
   return `<div class="cartao" style="overflow:auto"><p class="sub">Preço em AC (1 AC = R$ 1). Item desativado some do cardápio do cliente.</p>
     <table class="tabela"><thead><tr><th>Nome</th><th>Categoria</th><th>Facção</th><th>Preço (AC)</th><th>Ativo</th><th></th></tr></thead>
     <tbody>${linha(null)}${itens.map(linha).join('')}</tbody></table></div>`;
+}
+
+async function adminJogos() {
+  const r = await sb.from('jogos').select('*').order('nome');
+  if (r.error) return '<div class="cartao"><p class="sub">Atualize o banco (arquivo atualizar_tudo.sql) para ativar o catálogo de jogos.</p></div>';
+  const linha = j => `<tr data-id="${j?.id || ''}">
+      <td><input data-c="nome" value="${esc(j?.nome || '')}" placeholder="Nome do jogo"></td>
+      <td><input data-c="jogadores_min" type="number" min="1" max="20" value="${j?.jogadores_min ?? 2}"></td>
+      <td><input data-c="jogadores_max" type="number" min="1" max="20" value="${j?.jogadores_max ?? 4}"></td>
+      <td><input data-c="duracao_min" type="number" min="0" step="5" value="${j?.duracao_min ?? ''}" placeholder="min"></td>
+      <td><input data-c="ativo" type="checkbox" ${j?.ativo === false ? '' : 'checked'}></td>
+      <td><button class="botao pequeno" data-salvar-jogo>${j ? 'Salvar' : 'Adicionar'}</button></td></tr>`;
+  return `<div class="cartao" style="overflow:auto"><p class="sub">Catálogo de jogos de tabuleiro que o cliente escolhe ao pedir a Hora de Mesa.</p>
+    <table class="tabela"><thead><tr><th>Jogo</th><th>Mín.</th><th>Máx.</th><th>Duração</th><th>Ativo</th><th></th></tr></thead>
+    <tbody>${linha(null)}${r.data.map(linha).join('')}</tbody></table></div>`;
+}
+
+async function adminPartidas() {
+  const r = await sb.from('sessoes_mesa').select('*, jogos(nome), perfis(nome_exibicao), placar_mesa(jogador, pontos, ordem)')
+    .eq('status', 'encerrada').order('encerrada_em', { ascending: false }).limit(40);
+  if (r.error) return '<div class="cartao"><p class="sub">Atualize o banco (arquivo atualizar_tudo.sql) para ver as partidas.</p></div>';
+  const lista = await Promise.all(r.data.map(async m => {
+    let url = null;
+    if (m.audio_path) { const u = await sb.storage.from('experiencias').createSignedUrl(m.audio_path, 3600); url = u.data?.signedUrl || null; }
+    const placar = (m.placar_mesa || []).slice().sort((a, b) => b.pontos - a.pontos);
+    return `<div class="cartao partida">
+      <div class="linha"><h3>🎲 ${esc(m.jogos?.nome || m.jogo_livre || 'Jogo a combinar')}</h3><span class="estrelas-leitura">${'★'.repeat(m.nota || 0)}${'☆'.repeat(5 - (m.nota || 0))}</span></div>
+      <small>${esc(m.perfis?.nome_exibicao || 'Cliente')} · ${m.jogadores} pessoa(s) · ${m.encerrada_em ? new Date(m.encerrada_em).toLocaleString('pt-BR') : ''} · bônus de equipe ${m.xp_equipe} XP</small>
+      ${placar.length ? `<div class="mini-placar">${placar.map((x, i) => `<span class="${i === 0 && x.pontos > 0 ? 'lider' : ''}">${esc(x.jogador)} <b>${x.pontos}</b></span>`).join('')}</div>` : ''}
+      ${m.comentario ? `<p class="comentario">“${esc(m.comentario)}”</p>` : ''}
+      ${url ? `<audio controls preload="none" src="${url}"></audio>` : ''}
+    </div>`;
+  }));
+  return lista.length ? lista.join('') : '<p class="vazio grande">Nenhuma partida encerrada ainda.</p>';
 }
 
 async function adminRegras() {
@@ -384,11 +471,27 @@ raiz.addEventListener('click', e => {
   if (d.salvarItem !== undefined) return comTrava(b, async () => {
     const tr = b.closest('tr'); const v = c => tr.querySelector(`[data-c=${c}]`);
     const reg = { nome: v('nome').value.trim(), categoria: v('categoria').value, faccao: v('faccao').value || null,
-      preco_ac: Math.round(Number(v('preco_ac').value)), ativo: v('ativo').checked };
+      preco_ac: Math.round(Number(v('preco_ac').value)), ativo: v('ativo').checked, descricao: v('descricao').value.trim() || null };
     if (!reg.nome || Number.isNaN(reg.preco_ac)) throw new Error('Preencha nome e preço.');
     const id = tr.dataset.id;
     const { error } = id ? await sb.from('cardapio').update(reg).eq('id', id) : await sb.from('cardapio').insert(reg);
     if (error) throw error; toast(id ? 'Item salvo.' : 'Item adicionado.'); desenhar();
+  });
+  if (d.mesaAv) return comTrava(b, async () => {
+    const [id, st] = d.mesaAv.split('|');
+    const { error } = await sb.rpc('mesa_avancar', { _id: id, _status: st }); if (error) throw error;
+    toast(st === 'jogando' ? 'Partida iniciada.' : st === 'cancelada' ? 'Pedido cancelado.' : 'Marcado como separando.'); desenhar();
+  });
+  if (d.mesaPronta) return perguntarRotuloMesa(d.mesaPronta);
+  if (d.salvarJogo !== undefined) return comTrava(b, async () => {
+    const tr = b.closest('tr'); const v = c => tr.querySelector(`[data-c=${c}]`);
+    const mn = Math.round(Number(v('jogadores_min').value)), mx = Math.round(Number(v('jogadores_max').value));
+    const reg = { nome: v('nome').value.trim(), jogadores_min: mn, jogadores_max: mx,
+      duracao_min: v('duracao_min').value ? Math.round(Number(v('duracao_min').value)) : null, ativo: v('ativo').checked };
+    if (!reg.nome || !(mn >= 1) || !(mx >= mn)) throw new Error('Confira o nome e o número de jogadores.');
+    const id = tr.dataset.id;
+    const { error } = id ? await sb.from('jogos').update(reg).eq('id', id) : await sb.from('jogos').insert(reg);
+    if (error) throw error; toast(id ? 'Jogo salvo.' : 'Jogo adicionado.'); desenhar();
   });
   if (d.salvarPacote !== undefined) return comTrava(b, async () => {
     const tr = b.closest('tr'); const v = c => tr.querySelector(`[data-c=${c}]`);
@@ -498,6 +601,9 @@ function assinarTempoReal() {
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'itens_comanda' }, atualizar)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas' }, atualizar)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sessoes_kids' }, atualizar)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sessoes_mesa' }, () => { if (tem('cozinha')) { bip(); toast('🎲 Nova mesa de jogo pedida.'); } atualizar(); })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'sessoes_mesa' }, atualizar)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'placar_mesa' }, atualizar)
     .subscribe();
   setInterval(atualizar, 60000);   // atualiza os "há X min" mesmo sem evento
 }

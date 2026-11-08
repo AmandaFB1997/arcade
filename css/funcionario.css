@@ -76,3 +76,13 @@ body { background: radial-gradient(120% 70% at 50% -10%, #8b5cf622, transparent 
 .login h1 { letter-spacing: 2px; }
 .login .cartao { text-align: left; padding: 20px; border-radius: 20px; border-color: color-mix(in srgb, var(--destaque) 35%, var(--borda));
   box-shadow: 0 0 50px -20px var(--destaque); }
+
+/* ===== Mesas de jogo (estação Jogos) ===== */
+.mesas-bloco { margin-bottom: 18px; } .mesas-bloco h3 { margin: 0 0 8px; } .mesas-bloco h3 b { opacity: .6; margin-left: 6px; }
+.mesas-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.mesa-ticket { border-left-color: #a78bfa; } .mesa-ticket.solicitada { border-left-color: var(--alerta); }
+.mesa-ticket.pronta { border-left-color: var(--ok); } .mesa-ticket.jogando { border-left-color: var(--frequencia); }
+.mini-placar { display: flex; flex-wrap: wrap; gap: 6px; } .mini-placar span { padding: 3px 9px; border-radius: 999px; background: #ffffff10; font-size: .8rem; }
+.mini-placar span.lider { background: #ffd23f33; border: 1px solid #ffd23f88; }
+.partida { display: grid; gap: 6px; margin-bottom: 10px; } .partida .comentario { margin: 0; font-style: italic; } .partida audio { width: 100%; }
+.estrelas-leitura { color: #ffd23f; letter-spacing: 2px; }

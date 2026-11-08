@@ -68,16 +68,20 @@ export function ligarOnda() {
 
 // Confirmação grande no centro da tela: "o que você fez aparece pra você"
 let tFeedback = null;
-export function feedback({ icone = '✓', titulo, sub = '', tipo = 'ok', ms = 1700 }) {
+export function feedback({ icone = '✓', titulo, sub = '', tipo = 'ok', ms = 1700, acao = null }) {
   document.getElementById('feedback')?.remove(); clearTimeout(tFeedback);
   const el = document.createElement('div'); el.id = 'feedback'; el.className = `feedback ${tipo}`;
   const confete = tipo === 'ok' ? Array.from({ length: 14 }, (_, i) =>
     `<i style="--a:${i * 25.7}deg;--d:${50 + (i % 4) * 14}px;--c:${i % 3}"></i>`).join('') : '';
   el.innerHTML = `<div class="feedback-caixa"><div class="feedback-anel"><span>${icone}</span>${confete}</div>
-    <strong>${titulo}</strong>${sub ? `<small>${sub}</small>` : ''}</div>`;
-  el.addEventListener('click', () => el.remove());
+    <strong>${titulo}</strong>${sub ? `<small>${sub}</small>` : ''}
+    ${acao ? `<button class="botao primario feedback-acao" type="button">${acao.texto}</button>` : ''}</div>`;
+  el.addEventListener('click', e => {
+    if (acao && e.target.closest('.feedback-acao')) { el.remove(); acao.fn(); return; }
+    if (!acao || !e.target.closest('.feedback-caixa')) el.remove();
+  });
   document.body.appendChild(el); vibrar(tipo === 'ok' ? [14, 40, 14] : 30);
-  tFeedback = setTimeout(() => { el.classList.add('saindo'); setTimeout(() => el.remove(), 300); }, ms);
+  if (!acao) tFeedback = setTimeout(() => { el.classList.add('saindo'); setTimeout(() => el.remove(), 300); }, ms);
 }
 
 // Voa um "+1" do botão até o ícone da comanda

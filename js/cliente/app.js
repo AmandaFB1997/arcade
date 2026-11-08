@@ -36,7 +36,7 @@ const CATEGORIAS = { comida: 'Comida', bebida: 'Bebidas', jogo: 'Jogos', experie
 
 const S = {
   user: null, perfil: null, niveis: [], cfg: {}, cardapio: [], comanda: null, itens: [],
-  criancas: [], cotas: [], pedido: null, tela: 'inicio', categoria: 'todos',
+  criancas: [], cotas: [], pedido: null, jogos: [], mesa: null, tela: 'inicio', categoria: 'todos',
   quiz: { ordem: {}, empate: null, comecou: false },
 };
 let iniciado = false;
@@ -57,6 +57,7 @@ async function carregar() {
   S.cotas = await sb.from('cotas_investidor').select('*').eq('usuario_id', S.user.id).eq('ativo', true)
     .then(r => r.error ? [] : r.data, () => []);
   await carregarComanda();
+  await carregarJogos(); await carregarMesa();
 }
 
 async function recarregarPerfil() {
@@ -80,20 +81,31 @@ function desenhar() {
     raiz.innerHTML = `
       <header class="topo linha"><span class="marca">${LOGO} O CONCLAVE</span><button class="saldo" id="saldo" data-ir="carteira" aria-label="Carregar moedas"></button></header>
       <main id="main"></main>
+      <button class="pill-mesa" id="pill-mesa" data-ir="mesa" hidden></button>
       <nav class="nav-baixo">${TELAS.map(([id, nome]) =>
         `<button data-tela="${id}">${ICONE[id]}${nome}<b class="contador" id="cnt-${id}" hidden></b></button>`).join('')}</nav>`;
   }
   $('#saldo').textContent = fmtAC(S.perfil.saldo_ac);
+  const pill = $('#pill-mesa');
+  if (pill) {
+    pill.hidden = !S.mesa || S.tela === 'mesa';
+    if (S.mesa) pill.innerHTML = `<span>🎲</span> ${S.mesa.status === 'pronta' ? `<b>Sua mesa está pronta!</b> ${esc(S.mesa.mesa_jogo || '')}` : S.mesa.status === 'jogando' ? '<b>Partida em andamento</b>' : `<b>${esc(ROTULO_MESA[S.mesa.status])}</b>`}`;
+    pill.classList.toggle('alerta', S.mesa?.status === 'pronta');
+  }
   $$('.nav-baixo button').forEach(b => b.classList.toggle('ativo', b.dataset.tela === S.tela));
   const cnt = $('#cnt-comanda');
   cnt.hidden = S.itens.length === 0; cnt.textContent = S.itens.length;
-  const vistas = { carteira: vCarteira, covil: vCovil, inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz };
+  const vistas = { carteira: vCarteira, covil: vCovil, inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz, mesa: vMesa };
   const tela = vistas[S.tela] || vInicio;
   Promise.resolve(tela()).then(html => { const m = $('#main'); if (m) { m.innerHTML = html; entrada(m); animarNumeros(m); animarAneis(m); } })
     .catch(e => { $('#main').innerHTML = `<div class="cartao aviso">${esc(erroAmigavel(e))}</div>`; });
 }
 
-function ir(tela) { S.tela = tela; if (location.hash !== '#' + tela) location.hash = tela; else desenhar(); }
+function ir(tela) {
+  S.tela = tela;
+  const ir2 = () => { if (location.hash !== '#' + tela) location.hash = tela; else desenhar(); };
+  if (['mesa', 'inicio'].includes(tela) && S.user) carregarMesa().catch(() => {}).then(ir2); else ir2();   // garante a mesa em dia
+}
 
 /* ---------- telas ---------- */
 const ICONE_CAT = { comida: '🍔', bebida: '🍹', jogo: '🎲', kids: '🧸', personalizado: '✨', experiencia: '🎟️' };
@@ -131,14 +143,16 @@ function tileJogo(i, n = 0) {
 function cartaoItem(i, compacto = false) {
   const pers = i.categoria === 'personalizado';
   return `
-    <div class="cartao item inclina ${compacto ? 'compacto' : ''}" data-busca="${esc((i.nome + ' ' + (CATEGORIAS[i.categoria] || i.categoria)).toLowerCase())}">
+    <div class="cartao item inclina ${compacto ? 'compacto' : ''} ${i.descricao ? 'tem-desc' : ''}" ${i.descricao ? 'data-desc tabindex="0" role="button" aria-expanded="false"' : ''} data-busca="${esc((i.nome + ' ' + (CATEGORIAS[i.categoria] || i.categoria)).toLowerCase())}">
       <div class="item-icone">${ICONE_CAT[i.categoria] || '🍽️'}</div>
       <div class="item-corpo">
         <h3>${esc(i.nome)}</h3>
         ${i.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span> ` : ''}
         <div class="preco">${fmtAC(i.preco_ac)}${pers ? ' <small>+ adicionais</small>' : ''}</div>
+        ${i.descricao ? '<small class="ver-mais">o que tem ▾</small>' : ''}
       </div>
       <button class="botao ${compacto ? 'pequeno' : ''}" data-add="${i.id}">${pers ? 'Montar' : 'Pedir'}</button>
+      ${i.descricao ? `<div class="item-desc"><p>${esc(i.descricao)}</p></div>` : ''}
     </div>`;
 }
 
@@ -173,6 +187,11 @@ async function vInicio() {
       ${p.saldo_ac < 0 ? '<small>A diferença é cobrada em reais no fechamento.</small>' : ''}
     </section>
 
+    ${S.mesa ? `<section class="cartao mesa-card inclina ${S.mesa.status === 'pronta' ? 'alerta' : ''}">
+      <div class="linha"><div><small>SUA PARTIDA</small><h3 style="margin:2px 0">🎲 ${esc(nomeDoJogo(S.mesa))}</h3>
+        <small>${S.mesa.status === 'pronta' ? `Mesa pronta! ${esc(S.mesa.mesa_jogo || '')}` : esc(ROTULO_MESA[S.mesa.status])}</small></div>
+        <button class="botao primario" style="width:auto" data-ir="mesa">Abrir</button></div></section>` : ''}
+
     ${!p.faccao ? `
     <section class="cartao aviso cofre inclina">
       <div class="tranca">🔒</div>
@@ -183,7 +202,7 @@ async function vInicio() {
     </section>` : ''}
 
     <section>
-      <div class="linha secao-titulo"><h3>🎲 Jogue agora</h3><button class="botao pequeno" data-ir="cardapio">Ver todos</button></div>
+      <div class="linha secao-titulo"><h3>🎲 Jogue agora</h3><button class="botao pequeno" data-cat="jogo" data-ir="cardapio">Ver todos</button></div>
       ${jogos.length ? `<div class="carrossel">${jogos.map((j, n) => tileJogo(j, n)).join('')}</div>`
         : '<div class="cartao"><p class="sub" style="margin:0">Os jogos da casa aparecem aqui assim que forem cadastrados.</p></div>'}
     </section>
@@ -588,23 +607,34 @@ async function adicionar(item, detalhes = null) {
   desenhar();
 }
 
+const EMOJI_AD = { 'Bacon crocante': '🥓', 'Cheddar extra': '🧀', 'Ovo': '🍳', 'Cebola caramelizada': '🧅', 'Jalapeño': '🌶️', 'Cogumelos': '🍄', 'Molho da casa': '🥫', 'Queijo brie': '🧀' };
 function montarPersonalizado(item) {
   const extra = S.cfg.adicional_ac ?? 5;
   const m = abrirModal(`
-    <h2>${esc(item.nome)}</h2>
-    <p class="sub">Base ${fmtAC(item.preco_ac)} · cada adicional + ${fmtAC(extra)}</p>
-    <form id="f-pers">
-      ${ADICIONAIS.map(a => `<label style="color:var(--texto)"><input type="checkbox" name="ad" value="${esc(a)}">${esc(a)}</label>`).join('')}
-      <label>Observação para a cozinha<input name="obs" maxlength="120"></label>
-      <p class="preco" id="preco-pers"></p>
-      <button class="botao primario" type="submit">Pedir</button>
+    <form id="f-pers" class="montador">
+      <div class="montador-topo"><h2>🍔 Monte o seu hambúrguer</h2>
+        <p class="sub">O hambúrguer base já vem completo (${fmtAC(item.preco_ac)}). Quer turbinar? Toque nos extras que quiser, cada um é + ${fmtAC(extra)}.</p></div>
+      <div class="montador-corpo">
+        <h4>1. Escolha os extras <small>(opcional)</small></h4>
+        <div class="extras">${ADICIONAIS.map(a => `
+          <label class="extra"><input type="checkbox" name="ad" value="${esc(a)}"><span class="extra-cartao">
+            <i>${EMOJI_AD[a] || '➕'}</i><b>${esc(a)}</b><em>+ ${fmtAC(extra)}</em><u>✓</u></span></label>`).join('')}</div>
+        <h4>2. Algum recado para a cozinha? <small>(opcional)</small></h4>
+        <input name="obs" maxlength="120" placeholder="Ex.: sem cebola, carne bem passada">
+      </div>
+      <div class="montador-rodape">
+        <div class="montador-resumo"><span id="resumo-pers"></span><b id="preco-pers"></b></div>
+        <button class="botao primario" type="submit">Pedir meu hambúrguer</button>
+        <button class="botao" type="button" data-fechar style="width:100%;margin-top:6px">Cancelar</button>
+      </div>
     </form>`);
   const form = m.querySelector('#f-pers');
   const atualizar = () => {
     const n = form.querySelectorAll('input[name=ad]:checked').length;
-    m.querySelector('#preco-pers').textContent = `Total: ${fmtAC(item.preco_ac + n * extra)}`;
+    m.querySelector('#preco-pers').textContent = fmtAC(item.preco_ac + n * extra);
+    m.querySelector('#resumo-pers').textContent = n ? `Base + ${n} ${n === 1 ? 'extra' : 'extras'}` : 'Hambúrguer base, sem extras';
   };
-  form.addEventListener('change', atualizar); atualizar();
+  form.addEventListener('change', () => { vibrar(10); atualizar(); }); atualizar();
   form.addEventListener('submit', e => {
     e.preventDefault();
     const adicionais = [...form.querySelectorAll('input[name=ad]:checked')].map(x => x.value);
@@ -646,7 +676,242 @@ function fecharRevelacao() {
   setTimeout(() => o.remove(), 700);
 }
 
+/* ---------- HORA DE MESA ---------- */
+const ST_MESA = ['solicitada', 'separando', 'pronta', 'jogando'];
+const ROTULO_MESA = { solicitada: 'Pedido enviado', separando: 'Separando o jogo', pronta: 'Mesa pronta', jogando: 'Jogando' };
+let placar = [];                // [{ jogador, pontos, usuario_id }] — o 1º é sempre o anfitrião (você)
+let placarDaSessao = null;
+let fase = 'placar';            // 'placar' | 'avaliar'
+let aval = { nota: 0, texto: '', audio: null, url: null };
+let gravador = null, limiteGravacao = null, salvarT = null;
+const fmtTempo = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return `${String(Math.floor(t / 3600)).padStart(2, '0')}:${String(Math.floor(t / 60) % 60).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`; };
+const nomeDoJogo = m => m?.jogos?.nome || m?.jogo_livre || 'Jogo a combinar';
+
+async function carregarJogos() {
+  const r = await sb.from('jogos').select('*').eq('ativo', true).order('nome');
+  S.jogos = r.error ? [] : r.data;
+}
+
+async function carregarMesa() {
+  const r = await sb.from('sessoes_mesa').select('*, jogos(nome)').eq('usuario_id', S.user.id)
+    .in('status', ST_MESA).order('criada_em', { ascending: false }).limit(1).maybeSingle();
+  S.mesa = r.error ? null : r.data;                       // sem a tabela ainda: o app segue sem a Hora de Mesa
+  if (S.mesa && ['pronta', 'jogando'].includes(S.mesa.status) && placarDaSessao !== S.mesa.id) {
+    const p = await sb.from('placar_mesa').select('*').eq('sessao_id', S.mesa.id).order('ordem');
+    placar = p.data?.length ? p.data.map(x => ({ jogador: x.jogador, pontos: x.pontos, usuario_id: x.usuario_id }))
+      : [{ jogador: S.perfil.nome_exibicao, pontos: 0, usuario_id: S.user.id }];
+    placarDaSessao = S.mesa.id;
+  }
+  if (!S.mesa) { placar = []; placarDaSessao = null; fase = 'placar'; }
+}
+
+async function iniciarJogo(item) {                         // toque em "Jogar": garante comanda e abre a reserva
+  if (S.mesa) {
+    return feedback({ icone: '🎲', titulo: 'Você já tem uma mesa', sub: 'Termine essa partida antes de pedir outra.', tipo: 'info', ms: 2400,
+      acao: { texto: 'Ver minha mesa', fn: () => ir('mesa') } });
+  }
+  const cid = await garantirComanda();
+  if (!cid) return;
+  let jogoId = '', n = 4;
+  const jogos = S.jogos || [];
+  const m = abrirModal(`
+    <h2>Reservar mesa</h2>
+    <p class="sub">${esc(item.nome)} · ${fmtAC(item.preco_ac)}. Escolha o jogo e a equipe avisa quando a mesa estiver pronta.</p>
+    <div class="escolha-jogos">${jogos.map(j => `
+      <button type="button" class="opcao-jogo" data-jogo="${j.id}"><b>${esc(j.nome)}</b>
+        <small>${j.jogadores_min}–${j.jogadores_max} jogadores${j.duracao_min ? ` · ${j.duracao_min} min` : ''}</small></button>`).join('')}
+      <button type="button" class="opcao-jogo sel" data-jogo=""><b>🤔 Ainda não sei</b><small>A equipe ajuda você a escolher</small></button></div>
+    <label>Ou diga qual jogo você quer<input id="jogo-livre" maxlength="60" placeholder="Ex.: Banco Imobiliário"></label>
+    <div class="linha"><span>Quantas pessoas vão jogar?</span>
+      <span class="stepper"><button type="button" class="botao pequeno" data-n="-1">−</button><b id="n-pessoas">${n}</b><button type="button" class="botao pequeno" data-n="1">+</button></span></div>
+    <p class="sub" style="margin:10px 0 0">Quem leva mais gente ganha bônus de XP quando a partida termina.</p>
+    <button class="botao primario" id="reservar" style="margin-top:14px">Pedir a mesa</button>
+    <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Cancelar</button>`);
+  m.addEventListener('click', e => {
+    const o = e.target.closest('[data-jogo]');
+    if (o) { jogoId = o.dataset.jogo; m.querySelectorAll('.opcao-jogo').forEach(x => x.classList.toggle('sel', x === o)); return; }
+    const b = e.target.closest('[data-n]');
+    if (b) { n = Math.max(1, Math.min(20, n + Number(b.dataset.n))); m.querySelector('#n-pessoas').textContent = n; }
+  });
+  m.querySelector('#reservar').addEventListener('click', ev => comTrava(ev.currentTarget, async () => {
+    const livre = jogoId ? '' : m.querySelector('#jogo-livre').value.trim();
+    const { data: iid, error } = await sb.rpc('adicionar_item', { _comanda: cid, _item_cardapio: item.id, _quantidade: 1, _detalhes: null });
+    if (error) throw error;
+    const r2 = await sb.rpc('mesa_solicitar', { _item: iid, _jogo: jogoId || null, _jogo_livre: livre || null, _jogadores: n });
+    if (r2.error) throw r2.error;
+    await carregarComanda(); await carregarMesa();
+    fecharModal();
+    feedback({ icone: '🎲', titulo: 'Mesa pedida!', sub: 'Vamos separar o seu jogo. Você será avisado.' });
+    ir('mesa');
+  }));
+}
+
+function lider() {
+  const max = Math.max(...placar.map(j => j.pontos));
+  return max > 0 || placar.some(j => j.pontos !== 0) ? placar.findIndex(j => j.pontos === max) : -1;
+}
+
+function vMesa() {
+  const m = S.mesa;
+  if (!m) return `<section class="cartao aviso"><h2>Nenhuma mesa agora</h2>
+    <p class="sub">Peça uma Hora de Mesa, escolha o jogo e monte a sua equipe.</p>
+    <button class="botao primario" data-cat="jogo" data-ir="cardapio">Ver os jogos</button></section>`;
+  const etapas = ['solicitada', 'separando', 'pronta', 'jogando'], idx = etapas.indexOf(m.status);
+  const cab = `
+    <section class="mesa-cab">
+      <div class="mesa-jogo"><span>🎲</span><div><b>${esc(nomeDoJogo(m))}</b><small>${m.jogadores} pessoa(s)${m.mesa_jogo ? ` · ${esc(m.mesa_jogo)}` : ''}</small></div></div>
+      <div class="passos">${etapas.map((e, i) => `<div class="passo ${i < idx ? 'feito' : ''} ${i === idx ? 'atual' : ''}"><i>${i < idx ? '✓' : i + 1}</i><span>${ROTULO_MESA[e]}</span></div>`).join('')}</div>
+    </section>`;
+  if (m.status === 'solicitada' || m.status === 'separando') return cab + `
+    <section class="cartao esperando">
+      <div class="radar"><i></i><i></i><i></i><span>${m.status === 'separando' ? '📦' : '📨'}</span></div>
+      <h3>${m.status === 'separando' ? 'A equipe está separando o seu jogo' : 'Pedido enviado para a equipe'}</h3>
+      <p class="sub">Pode ficar tranquilo. Quando a mesa estiver pronta, avisamos aqui na tela e você toca para abrir.</p>
+      ${m.status === 'solicitada' ? '<button class="botao perigo" data-acao="cancelar-mesa">Cancelar pedido</button>' : ''}
+    </section>`;
+  if (m.status === 'pronta') return cab + `
+    <section class="cartao mesa-pronta inclina">
+      <div class="sino">🔔</div><h2>Sua mesa está pronta!</h2>
+      <div class="mesa-numero">${esc(m.mesa_jogo || 'Mesa')}</div>
+      <p class="sub">${esc(nomeDoJogo(m))} já está esperando por vocês. Sentou? Toque para começar a contar o tempo e o placar.</p>
+      <button class="botao primario" data-acao="iniciar-mesa">Cheguei, começar a partida</button>
+    </section>`;
+  return cab + (fase === 'avaliar' ? vAvaliar() : vPlacar());
+}
+
+function vPlacar() {
+  const m = S.mesa, extras = Math.max(0, placar.length - 1);
+  const por = S.cfg.xp_equipe_por_pessoa ?? 10, teto = S.cfg.xp_equipe_max ?? 50, min = S.cfg.xp_equipe_min_minutos ?? 10;
+  const bonus = Math.min(por * extras, teto), ld = lider();
+  return `
+    <section class="cartao relogio"><small>Tempo de mesa</small><b data-timer>${fmtTempo(Date.now() - new Date(m.iniciada_em || Date.now()))}</b></section>
+    <section class="cartao equipe-bonus"><div class="linha"><div><b>Sua equipe: ${placar.length} ${placar.length === 1 ? 'pessoa' : 'pessoas'}</b>
+      <small>${extras ? `Bônus de equipe: +${bonus} XP${bonus >= teto ? ' (máximo)' : ''}` : `+${por} XP por pessoa que você levar (até +${teto})`}</small></div>
+      <button class="botao pequeno" data-acao="add-jogador">+ Pessoa</button></div>
+      <small>O bônus vale para partidas com pelo menos ${min} min.</small></section>
+    <section class="placar">${placar.map((j, i) => `
+      <div class="jogador ${ld === i ? 'lider' : ''}">
+        <div class="ini">${esc((j.jogador || '?').trim().slice(0, 1).toUpperCase())}</div>
+        <div class="nome">${i === 0 ? `<b>${esc(j.jogador)}</b> <small>você</small>` : `<input data-nome-jog="${i}" value="${esc(j.jogador)}" maxlength="30" aria-label="Nome do jogador">`}
+          ${ld === i ? '<span class="coroa">👑 na frente</span>' : (j.usuario_id && i ? '<small>jogador do Conclave</small>' : '')}</div>
+        <div class="pontos"><button class="botao pequeno" data-pt="${i}|-1" aria-label="Tirar ponto">−</button><b>${j.pontos}</b><button class="botao pequeno" data-pt="${i}|1" aria-label="Dar ponto">+</button>
+          <button class="botao pequeno" data-pt="${i}|5" aria-label="Dar 5 pontos">+5</button></div>
+        ${i ? `<button class="x-jog" data-rm-jog="${i}" aria-label="Remover jogador">×</button>` : ''}
+      </div>`).join('')}</section>
+    <button class="botao primario" data-acao="encerrar-mesa">Encerrar a partida</button>`;
+}
+
+function vAvaliar() {
+  return `
+    <section class="cartao avaliar">
+      <h2>Como foi a partida?</h2>
+      <p class="sub">Conte a sua experiência. Pode escrever, mandar um áudio, ou os dois. Não é obrigatório.</p>
+      <div class="estrelas" role="group" aria-label="Nota">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="${n <= aval.nota ? 'on' : ''}" data-nota="${n}" aria-label="${n} estrelas">★</button>`).join('')}</div>
+      <label>O que você achou?<textarea id="aval-texto" rows="3" maxlength="1000" placeholder="O jogo, a mesa, o atendimento, o que podemos melhorar…">${esc(aval.texto)}</textarea></label>
+      <div class="audio-bloco">
+        ${gravador ? '<button class="botao perigo gravando" data-acao="gravar">⏹ Parar a gravação</button><small>Gravando… até 60 segundos</small>'
+          : `<button class="botao" data-acao="gravar">🎙️ ${aval.url ? 'Gravar de novo' : 'Gravar um áudio'}</button>`}
+        ${aval.url && !gravador ? `<audio controls src="${aval.url}"></audio>` : ''}
+      </div>
+      <button class="botao primario" data-acao="enviar-aval">Encerrar e enviar</button>
+      <button class="botao" data-acao="voltar-placar" style="width:100%;margin-top:8px">Voltar ao placar</button>
+    </section>`;
+}
+
+function agendarSalvar() {
+  clearTimeout(salvarT);
+  salvarT = setTimeout(() => salvarPlacar().catch(() => {}), 700);
+}
+async function salvarPlacar() {
+  clearTimeout(salvarT);
+  if (!S.mesa || S.mesa.status !== 'jogando') return;
+  const { error } = await sb.rpc('mesa_salvar_placar', { _id: S.mesa.id, _placar: placar.map(j => ({ jogador: j.jogador, pontos: j.pontos, usuario_id: j.usuario_id || null })) });
+  if (error) throw error;
+}
+
+function abrirAdicionarPessoa() {
+  const m = abrirModal(`
+    <h2>Adicionar à equipe</h2>
+    <label>Procurar jogador do Conclave pelo nome<input id="busca-jog" placeholder="Digite pelo menos 3 letras" autocomplete="off"></label>
+    <div id="res-jog" class="resultado-busca"></div>
+    <form id="f-convidado"><label>Ou adicione quem ainda não tem conta<input name="nome" maxlength="30" placeholder="Nome do convidado"></label>
+      <button class="botao" type="submit">Adicionar convidado</button></form>
+    <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Fechar</button>`);
+  let t = null;
+  m.querySelector('#busca-jog').addEventListener('input', ev => {
+    clearTimeout(t); const q = ev.target.value.trim();
+    t = setTimeout(async () => {
+      const box = m.querySelector('#res-jog');
+      if (q.length < 3) { box.innerHTML = ''; return; }
+      const { data } = await sb.rpc('buscar_jogadores', { _q: q });
+      const livres = (data || []).filter(p => !placar.some(j => j.usuario_id === p.id));
+      box.innerHTML = livres.length ? livres.map(p => `<button type="button" class="botao" data-add-membro="${p.id}|${esc(p.nome_exibicao)}">${esc(p.nome_exibicao)} <small>adicionar</small></button>`).join('')
+        : '<p class="sub">Ninguém encontrado com esse nome.</p>';
+    }, 350);
+  });
+  m.addEventListener('click', e => {
+    const b = e.target.closest('[data-add-membro]'); if (!b) return;
+    const [id, ...resto] = b.dataset.addMembro.split('|');
+    placar.push({ jogador: resto.join('|').slice(0, 30), pontos: 0, usuario_id: id });
+    fecharModal(); agendarSalvar(); desenhar();
+  });
+  m.querySelector('#f-convidado').addEventListener('submit', e => {
+    e.preventDefault(); const nome = new FormData(e.target).get('nome').trim(); if (!nome) return;
+    placar.push({ jogador: nome.slice(0, 30), pontos: 0, usuario_id: null });
+    fecharModal(); agendarSalvar(); desenhar();
+  });
+}
+
+async function alternarGravacao() {
+  if (gravador) { gravador.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const tipo = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find(t => window.MediaRecorder?.isTypeSupported?.(t));
+    const rec = new MediaRecorder(stream, tipo ? { mimeType: tipo } : undefined), partes = [];
+    rec.ondataavailable = e => { if (e.data.size) partes.push(e.data); };
+    rec.onstop = () => {
+      stream.getTracks().forEach(t => t.stop()); clearTimeout(limiteGravacao);
+      aval.audio = new Blob(partes, { type: rec.mimeType || tipo || 'audio/webm' });
+      if (aval.url) URL.revokeObjectURL(aval.url);
+      aval.url = URL.createObjectURL(aval.audio); gravador = null; desenhar();
+    };
+    rec.start(); gravador = rec; limiteGravacao = setTimeout(() => rec.state === 'recording' && rec.stop(), 60000); desenhar();
+  } catch { toast('Não consegui usar o microfone. Libere o acesso nas configurações do navegador.', 'erro'); }
+}
+
+async function enviarAvaliacao() {
+  const m = S.mesa; await salvarPlacar();
+  let caminho = null;
+  if (aval.audio) {
+    const ext = aval.audio.type.includes('mp4') ? 'm4a' : 'webm';
+    caminho = `${S.user.id}/${m.id}.${ext}`;
+    const up = await sb.storage.from('experiencias').upload(caminho, aval.audio, { contentType: aval.audio.type.split(';')[0], upsert: true });
+    if (up.error) throw new Error('Não deu para enviar o áudio. Tente de novo ou envie só o texto.');
+  }
+  const { data, error } = await sb.rpc('mesa_encerrar', { _id: m.id, _nota: aval.nota || null, _comentario: aval.texto.trim() || null, _audio: caminho });
+  if (error) throw error;
+  if (aval.url) URL.revokeObjectURL(aval.url);
+  aval = { nota: 0, texto: '', audio: null, url: null };
+  await carregarMesa(); await recarregarPerfil();
+  const xp = data?.xp_equipe || 0;
+  feedback({ icone: '🏆', titulo: 'Partida encerrada!', sub: xp ? `Bônus de equipe: +${xp} XP. Obrigado por contar como foi.` : 'Obrigado por contar como foi.', ms: 2800 });
+  ir('inicio');
+}
+
+setInterval(() => {
+  const el = document.querySelector('[data-timer]');
+  if (el && S.mesa?.iniciada_em) el.textContent = fmtTempo(Date.now() - new Date(S.mesa.iniciada_em));
+}, 1000);
+
 /* ---------- eventos ---------- */
+function alternarDescricao(el) {
+  const aberto = el.classList.toggle('aberto'); el.setAttribute('aria-expanded', aberto);
+  const v = el.querySelector('.ver-mais'); if (v) v.textContent = aberto ? 'fechar ▴' : 'o que tem ▾';
+  vibrar(8);
+}
+raiz.addEventListener('click', e => { const c = e.target.closest('[data-desc]'); if (c && !e.target.closest('button')) alternarDescricao(c); });
+raiz.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches?.('[data-desc]')) { e.preventDefault(); alternarDescricao(e.target); } });
+
 raiz.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
   if (t.dataset.pacote) return comTrava(t, () => escolherPacote(t.dataset.pacote));
@@ -655,13 +920,32 @@ raiz.addEventListener('click', e => {
     try { await navigator.clipboard.writeText(S.pedido.pix_copia_cola); toast('Código PIX copiado. Cole no app do seu banco.'); }
     catch { toast('Não deu para copiar. Selecione o código e copie.', 'erro'); }
   });
+  const ac = t.dataset.acao;
+  if (ac === 'cancelar-mesa') return comTrava(t, async () => { const { error } = await sb.rpc('mesa_cancelar', { _id: S.mesa.id }); if (error) throw error;
+    await carregarMesa(); await carregarComanda(); toast('Pedido cancelado.'); ir('inicio'); });
+  if (ac === 'iniciar-mesa') return comTrava(t, async () => { const { error } = await sb.rpc('mesa_iniciar', { _id: S.mesa.id }); if (error) throw error;
+    await carregarMesa(); fase = 'placar'; feedback({ icone: '🎲', titulo: 'Partida iniciada!', sub: 'Bom jogo! O tempo começou a contar.' }); desenhar(); });
+  if (ac === 'add-jogador') return abrirAdicionarPessoa();
+  if (ac === 'encerrar-mesa') { fase = 'avaliar'; return desenhar(); }
+  if (ac === 'voltar-placar') { fase = 'placar'; return desenhar(); }
+  if (ac === 'gravar') return alternarGravacao();
+  if (ac === 'enviar-aval') return comTrava(t, enviarAvaliacao);
+  if (t.dataset.nota) { aval.nota = Number(t.dataset.nota); return desenhar(); }
+  if (t.dataset.pt) { const [i, d] = t.dataset.pt.split('|').map(Number); placar[i].pontos = Math.max(-9999, Math.min(9999, placar[i].pontos + d)); agendarSalvar(); return desenhar(); }
+  if (t.dataset.rmJog) { placar.splice(Number(t.dataset.rmJog), 1); agendarSalvar(); return desenhar(); }
   if (t.dataset.quiz === 'comecar') { S.quiz.comecou = true; return desenhar(); }
-  if (t.dataset.tela) return ir(t.dataset.tela);
+  if (t.dataset.tela) { if (t.dataset.tela === 'cardapio') S.categoria = 'todos'; return ir(t.dataset.tela); }
   if (t.dataset.cat && t.dataset.ir) { S.categoria = t.dataset.cat; return ir(t.dataset.ir); }
-  if (t.dataset.ir) return ir(t.dataset.ir);
-  if (t.dataset.cat) { S.categoria = t.dataset.cat; return desenhar(); }
+  if (t.dataset.ir) { if (t.dataset.ir === 'cardapio') S.categoria = 'todos'; return ir(t.dataset.ir); }
+  if (t.dataset.cat) {
+    S.categoria = t.dataset.cat;
+    const y = window.scrollY; desenhar();                      // mantém a posição da tela e centraliza a categoria escolhida
+    requestAnimationFrame(() => { window.scrollTo(0, y); $('.categorias .ativo')?.scrollIntoView({ inline: 'center', block: 'nearest' }); });
+    return;
+  }
   if (t.dataset.add) {
     const item = S.cardapio.find(i => i.id === t.dataset.add);
+    if (item.categoria === 'jogo') return comTrava(t, () => iniciarJogo(item));
     return item.categoria === 'personalizado' ? montarPersonalizado(item) : comTrava(t, async () => { voarParaComanda(t); await adicionar(item); });
   }
   if (t.dataset.resp) { const [i, f] = t.dataset.resp.split('|'); t.classList.add('marcado'); return comTrava(t, () => responderQuiz(Number(i), f)); }
@@ -675,6 +959,8 @@ raiz.addEventListener('click', e => {
 document.addEventListener('click', e => { if (e.target.closest('[data-fechar-rev]')) fecharRevelacao(); });
 ligarInclinacao(); ligarOnda();
 document.addEventListener('input', e => {
+  if (e.target.id === 'aval-texto') { aval.texto = e.target.value; return; }
+  if (e.target.dataset?.nomeJog) { placar[Number(e.target.dataset.nomeJog)].jogador = e.target.value.slice(0, 30); agendarSalvar(); return; }
   if (e.target.id !== 'busca') return;
   const q = e.target.value.trim().toLowerCase(); let n = 0;
   $$('#main [data-busca]').forEach(el => { const ok = !q || el.dataset.busca.includes(q); el.hidden = !ok; if (ok) n++; });
@@ -737,6 +1023,17 @@ function assinarTempoReal() {
   sb.channel('cliente')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'itens_comanda' }, atualizar)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas' }, atualizar)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'sessoes_mesa', filter: `usuario_id=eq.${S.user.id}` }, async p => {
+      const antes = S.mesa?.status, novo = p.new?.status;
+      try { await carregarMesa(); } catch { return; }
+      if (novo && novo !== antes) {
+        if (novo === 'separando') feedback({ icone: '📦', titulo: 'Separando o seu jogo!', sub: 'A equipe já está preparando a mesa.', tipo: 'info', ms: 2200 });
+        if (novo === 'pronta') { feedback({ icone: '🔔', titulo: 'Sua mesa está pronta!', sub: p.new.mesa_jogo || '', acao: { texto: 'Ver minha mesa', fn: () => ir('mesa') } }); vibrar([150, 80, 150]); }
+        if (novo === 'cancelada') feedback({ icone: '⚠️', titulo: 'Pedido de mesa cancelado', sub: 'Fale com a equipe se precisar.', tipo: 'info', ms: 2600 });
+      }
+      if (['inicio', 'mesa'].includes(S.tela) && !$('#modal.aberto') && !gravador && !document.activeElement?.matches?.('input, textarea')) desenhar();
+      else desenhar();
+    })
     .subscribe();
 }
 

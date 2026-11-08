@@ -9,6 +9,12 @@ O QUE TEM DE NOVO
 - NOVO: recarga por PIX no app, em pacotes com bônus (o saldo atualiza sozinho quando o banco confirma)
 - NOVO: login por WhatsApp (código de 6 dígitos) — o e-mail+senha continua como alternativa
 - NOVO: investidores (Covil do Dragão): cotas, rendimento mensal em AC e buff de XP; Admin > Pacotes e Admin > Investidores
+- NOVO: Hora de Mesa redesenhada. Cliente aperta Jogar, escolhe o jogo do catálogo (ou "ainda não sei") e quantas pessoas;
+  acompanha as etapas; recebe o aviso "Sua mesa está pronta" (toque abre a mesa); marca o placar, monta a equipe
+  (busca jogadores do Conclave ou convidados) com bônus de XP por pessoa; encerra com nota, texto e/ou áudio.
+  Equipe: aba Jogos tem "Mesas de jogo" (Separar o jogo > Mesa pronta com o nome da mesa > Cliente sentou).
+  Admin > Jogos (catálogo) e Admin > Partidas (placar, nota, comentário, áudio). Bônus ajustável em Admin > Regras (xp_equipe_*).
+  Rode o sql/atualizar_tudo.sql (apague o que estiver no editor antes de colar).
 
 PARTE 1 — COLOCAR O SITE NO AR (obrigatório, 5 minutos)
 1) SQL Editor do projeto arcade: abra o arquivo sql/atualizar_tudo.sql, copie TUDO, cole e clique em Run. (Uma vez só; se rodar de novo, não dá erro.)
