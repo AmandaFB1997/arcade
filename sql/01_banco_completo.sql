@@ -23,15 +23,15 @@ create table public.configuracoes (
 );
 insert into public.configuracoes (chave, valor, observacao) values
   ('xp_por_ac', 1, 'XP ganho por 1 AC gasto. REGRA AINDA NÃO DEFINIDA PELOS SÓCIOS: ajustar aqui.'),
-  ('adicional_ac', 5000, 'Preço de cada adicional do hambúrguer personalizado (AC).');
+  ('adicional_ac', 5, 'Preço de cada adicional do hambúrguer personalizado (AC).');
 
 create table public.niveis (
   nivel int primary key check (nivel between 0 and 20),
   xp_necessario bigint not null
 );
--- PLACEHOLDER linear (50.000 XP por nível). Troque pela curva oficial quando decidirem.
+-- PLACEHOLDER linear (100 XP por nível). Troque pela curva oficial quando decidirem.
 insert into public.niveis (nivel, xp_necessario)
-select n, n * 50000 from generate_series(0, 20) n;
+select n, n * 100 from generate_series(0, 20) n;
 
 -- ---------- Perfis (1 por login) ----------
 create table public.perfis (
@@ -88,7 +88,7 @@ create table public.cardapio (
   nome text not null,
   categoria text not null,                           -- comida | bebida | jogo | experiencia | kids
   faccao public.faccao,
-  preco_ac bigint not null check (preco_ac >= 0),    -- 1.000 AC = R$ 1
+  preco_ac bigint not null check (preco_ac >= 0),    -- 1 AC = R$ 1
   ativo boolean not null default true
 );
 

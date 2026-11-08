@@ -6,7 +6,7 @@ import { sessaoAtual, montarLogin, sair } from '../auth.js';
 const raiz = document.getElementById('app');
 const ok = r => { if (r.error) throw r.error; return r.data; };
 const CATEGORIAS = ['comida', 'bebida', 'jogo', 'kids', 'personalizado'];
-const PACOTES = [[20, 20000], [50, 55000], [100, 120000]];   // R$ → AC (com bônus)
+const PACOTES = [[30, 30], [50, 55], [100, 115], [200, 240]];   // R$ → AC (com bônus)
 
 const E = { user: null, perfil: null, papeis: [], aba: null, subAdmin: 'cardapio' };
 let iniciado = false;
@@ -133,7 +133,7 @@ function modalRecarga(usuarioId = '', nome = '') {
   m.querySelector('#valor-r').addEventListener('input', () => { acPacote = null; $$('.pacotes .botao', m).forEach(x => x.classList.remove('ativo')); });
   m.querySelector('#ok-recarga').addEventListener('click', ev => comTrava(ev.target, async () => {
     const reais = Number(m.querySelector('#valor-r').value);
-    const ac = acPacote ?? Math.round(reais * 1000);
+    const ac = acPacote ?? Math.round(reais);
     if (!escolhido) throw new Error('Escolha o cliente.');
     if (!ac || ac <= 0) throw new Error('Escolha um pacote ou digite um valor.');
     const { error } = await sb.rpc('recarga_saldo', { _usuario: escolhido.id, _valor_ac: ac, _tipo: 'recarga' });
@@ -181,10 +181,13 @@ async function vCozinha() {
 /* ================= ADMIN ================= */
 async function vAdmin() {
   const sub = E.subAdmin;
-  const menu = `<div class="abas" style="margin-bottom:12px">${[['cardapio', 'Cardápio'], ['regras', 'Regras e níveis'], ['equipe', 'Equipe']]
+  const menu = `<div class="abas" style="margin-bottom:12px">${[['cardapio', 'Cardápio'], ['regras', 'Regras e níveis'], ['pacotes', 'Pacotes'], ['pesquisa', 'Jogadores'], ['investidores', 'Investidores'], ['equipe', 'Equipe']]
     .map(([id, n]) => `<button class="botao pequeno ${sub === id ? 'ativo' : ''}" data-sub="${id}">${n}</button>`).join('')}</div>`;
   if (sub === 'cardapio') return menu + await adminCardapio();
   if (sub === 'regras') return menu + await adminRegras();
+  if (sub === 'pesquisa') return menu + await adminPesquisa();
+  if (sub === 'pacotes') return menu + await adminPacotes();
+  if (sub === 'investidores') return menu + await adminInvestidores();
   return menu + await adminEquipe();
 }
 
@@ -203,7 +206,7 @@ async function adminCardapio() {
       <td><input data-c="ativo" type="checkbox" ${i?.ativo === false ? '' : 'checked'}></td>
       <td><button class="botao pequeno" data-salvar-item>${i ? 'Salvar' : 'Adicionar'}</button></td>
     </tr>`;
-  return `<div class="cartao" style="overflow:auto"><p class="sub">Preço em AC (1.000 AC = R$ 1). Item desativado some do cardápio do cliente.</p>
+  return `<div class="cartao" style="overflow:auto"><p class="sub">Preço em AC (1 AC = R$ 1). Item desativado some do cardápio do cliente.</p>
     <table class="tabela"><thead><tr><th>Nome</th><th>Categoria</th><th>Facção</th><th>Preço (AC)</th><th>Ativo</th><th></th></tr></thead>
     <tbody>${linha(null)}${itens.map(linha).join('')}</tbody></table></div>`;
 }
@@ -220,6 +223,60 @@ async function adminRegras() {
       <div class="grade" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
       ${niveis.map(n => `<label>Nível ${n.nivel}<input data-nivel="${n.nivel}" type="number" min="0" value="${n.xp_necessario}"></label>`).join('')}</div>
       <button class="botao primario" data-salvar-niveis>Salvar níveis</button></div>`;
+}
+
+async function adminPacotes() {
+  const { data, error } = await sb.from('pacotes_recarga').select('*').order('ordem');
+  if (error) throw error;
+  const linha = p => `<tr data-pid="${p?.id || ''}">
+    <td><input data-c="nome" value="${esc(p?.nome || '')}" placeholder="Nome" style="margin:0"></td>
+    <td><input data-c="valor_reais" type="number" step="0.01" min="1" value="${p?.valor_reais ?? ''}" style="margin:0;width:90px"></td>
+    <td><input data-c="valor_ac" type="number" min="1" value="${p?.valor_ac ?? ''}" style="margin:0;width:90px"></td>
+    <td><input data-c="ordem" type="number" value="${p?.ordem ?? data.length + 1}" style="margin:0;width:60px"></td>
+    <td><label style="margin:0"><input type="checkbox" data-c="destaque" ${p?.destaque ? 'checked' : ''}> destaque</label>
+        <label style="margin:0"><input type="checkbox" data-c="ativo" ${p?.ativo !== false ? 'checked' : ''}> ativo</label></td>
+    <td><button class="botao pequeno" data-salvar-pacote>${p ? 'Salvar' : 'Adicionar'}</button></td></tr>`;
+  return `<div class="cartao" style="overflow:auto"><p class="sub">Pacotes que o cliente vê para pagar com PIX. Quanto maior o pacote, maior o bônus em AC (1 AC = R$ 1). Valores provisórios.</p>
+    <table><thead><tr><th>Nome</th><th>Paga (R$)</th><th>Recebe (AC)</th><th>Ordem</th><th></th><th></th></tr></thead>
+    <tbody>${data.map(linha).join('')}${linha(null)}</tbody></table></div>`;
+}
+
+async function adminInvestidores() {
+  const { data, error } = await sb.rpc('listar_investidores');
+  if (error) throw error;
+  const mesAtual = new Date().toISOString().slice(0, 7);
+  return `<div class="cartao"><h2>Nova cota</h2>
+      <p class="sub">A pessoa precisa já ter conta no app (cliente). Use o e-mail do cadastro dela.</p>
+      <form id="f-cota">
+        <label>E-mail<input name="email" type="email" required></label>
+        <label>Descrição<input name="descricao" required placeholder="Ex.: Cota fundadora"></label>
+        <div class="grade" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+          <label>Aportado (R$)<input name="aporte" type="number" step="0.01" min="0" value="0"></label>
+          <label>Participação (%)<input name="part" type="number" step="0.001" min="0" value="0"></label>
+          <label>Bônus de XP (%)<input name="bonus" type="number" step="0.01" min="0" value="0"></label></div>
+        <button class="botao primario" type="submit">Cadastrar cota</button></form></div>
+    <div class="cartao" style="overflow:auto"><h2>Investidores</h2>
+      ${data.length ? `<table><thead><tr><th>Pessoa</th><th>Cota</th><th>Aportado</th><th>Part.</th><th>XP</th><th>Rendimentos</th><th></th></tr></thead><tbody>
+      ${data.map(c => `<tr><td>${esc(c.nome)}<br><small>${esc(c.email)}</small></td><td>${esc(c.descricao)}${c.ativo ? '' : ' <small>(encerrada)</small>'}</td>
+        <td>${fmtReais(c.valor_aportado)}</td><td>${Number(c.participacao_percentual)}%</td><td>+${Number(c.bonus_xp_percentual)}%</td><td>${fmtAC(c.total_rendimentos)}</td>
+        <td>${c.ativo ? `<button class="botao pequeno" data-pagar-rend="${c.usuario_id}|${esc(c.nome)}">Pagar rendimento</button>
+          <button class="botao pequeno perigo" data-encerrar-cota="${c.cota_id}">Encerrar</button>` : ''}</td></tr>`).join('')}</tbody></table>`
+        : '<p class="vazio">Nenhum investidor ainda.</p>'}</div>
+    <p class="sub">O rendimento cai no saldo do investidor em AC, uma vez por mês. Mês atual: ${mesAtual}.</p>`;
+}
+
+async function adminPesquisa() {
+  const { data, error } = await sb.rpc('listar_pesquisa_jogadores');
+  if (error) throw error;
+  if (!data.length) return '<p class="vazio">Ninguém respondeu ainda. As respostas aparecem aqui conforme os clientes fazem o primeiro acesso.</p>';
+  const idades = data.filter(d => d.idade != null).map(d => d.idade);
+  const media = idades.length ? Math.round(idades.reduce((a, b) => a + b, 0) / idades.length) : '—';
+  const porCasa = Object.keys(NOME_FACCAO).map(k => `${NOME_FACCAO[k]}: ${data.filter(d => d.faccao === k).length}`).join(' · ');
+  const linhas = data.map(d => `<tr><td>${esc(d.nome)}<br><small>${esc(d.email)}</small></td><td>${d.idade ?? '—'}</td>
+    <td>${d.faccao ? esc(NOME_FACCAO[d.faccao]) : '—'}</td><td>${esc(d.tempo_jogando || '—')}</td><td>${esc(d.motivacao_continuar || '—')}</td></tr>`).join('');
+  return `<div class="cartao"><strong>${data.length}</strong> respostas · idade média <strong>${media}</strong><br><small>${porCasa}</small></div>
+    <div class="cartao" style="overflow:auto"><p class="sub">O que mantém cada pessoa jogando, nas palavras dela.</p>
+    <table><thead><tr><th>Jogador</th><th>Idade</th><th>Casa</th><th>Joga há</th><th>O que a faz continuar</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
 async function adminEquipe() {
@@ -266,6 +323,39 @@ raiz.addEventListener('click', e => {
     const { error } = id ? await sb.from('cardapio').update(reg).eq('id', id) : await sb.from('cardapio').insert(reg);
     if (error) throw error; toast(id ? 'Item salvo.' : 'Item adicionado.'); desenhar();
   });
+  if (d.salvarPacote !== undefined) return comTrava(b, async () => {
+    const tr = b.closest('tr'); const v = c => tr.querySelector(`[data-c=${c}]`);
+    const reg = { nome: v('nome').value.trim(), valor_reais: Number(v('valor_reais').value), valor_ac: Math.round(Number(v('valor_ac').value)),
+      ordem: Math.round(Number(v('ordem').value) || 0), destaque: v('destaque').checked, ativo: v('ativo').checked };
+    if (!reg.nome || !(reg.valor_reais > 0) || !(reg.valor_ac > 0)) throw new Error('Preencha nome, valor em R$ e quantidade de AC.');
+    const id = tr.dataset.pid;
+    const { error } = id ? await sb.from('pacotes_recarga').update(reg).eq('id', id) : await sb.from('pacotes_recarga').insert(reg);
+    if (error) throw error; toast(id ? 'Pacote salvo.' : 'Pacote adicionado.'); desenhar();
+  });
+  if (d.encerrarCota) return comTrava(b, async () => {
+    if (!confirm('Encerrar esta cota? O investidor perde o buff de XP e não recebe novos rendimentos.')) return;
+    const { error } = await sb.rpc('encerrar_cota', { _cota: d.encerrarCota });
+    if (error) throw error; toast('Cota encerrada.'); desenhar();
+  });
+  if (d.pagarRend) {
+    const [uid, nome] = partir(d.pagarRend);
+    const m = abrirModal(`<h2>Pagar rendimento</h2><p class="sub">${esc(nome)} — cai no saldo dele em AC.</p>
+      <form id="f-rend"><label>Mês de referência<input name="mes" type="month" required value="${new Date().toISOString().slice(0, 7)}"></label>
+      <label>Valor em AC<input name="valor" type="number" min="1" step="1" required></label>
+      <label>Observação (opcional)<input name="obs" maxlength="120"></label>
+      <button class="botao primario" type="submit">Pagar</button>
+      <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Cancelar</button></form>`);
+    m.querySelector('#f-rend').addEventListener('submit', ev => {
+      ev.preventDefault(); const fd = new FormData(ev.target);
+      comTrava(ev.target.querySelector('button[type=submit]'), async () => {
+        const { error } = await sb.rpc('pagar_rendimento', { _usuario: uid, _competencia: fd.get('mes') + '-01',
+          _valor_ac: Math.round(Number(fd.get('valor'))), _observacao: fd.get('obs') || null });
+        if (error) throw new Error(/duplicate|unique/i.test(error.message) ? 'Esse mês já foi pago para esta pessoa.' : error.message);
+        fecharModal(); toast('Rendimento pago.'); desenhar();
+      });
+    });
+    return;
+  }
   if (d.salvarCfg !== undefined) return comTrava(b, async () => {
     for (const el of $$('[data-cfg]')) {
       const { error } = await sb.from('configuracoes').update({ valor: Number(el.value) }).eq('chave', el.dataset.cfg);
@@ -292,6 +382,14 @@ raiz.addEventListener('submit', e => {
     comTrava(e.target.querySelector('button'), async () => {
       const { error } = await sb.rpc('conceder_papel', { _email: f.get('email').trim(), _papel: f.get('papel') });
       if (error) throw error; toast('Papel concedido.'); desenhar();
+    });
+  }
+  if (e.target.id === 'f-cota') {
+    const f = new FormData(e.target);
+    comTrava(e.target.querySelector('button'), async () => {
+      const { error } = await sb.rpc('cadastrar_cota', { _email: f.get('email').trim(), _descricao: f.get('descricao'),
+        _valor_aportado: Number(f.get('aporte')), _participacao: Number(f.get('part')), _bonus_xp: Number(f.get('bonus')) });
+      if (error) throw error; toast('Cota cadastrada.'); desenhar();
     });
   }
 });

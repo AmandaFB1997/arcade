@@ -1,0 +1,41 @@
+O CONCLAVE — ATUALIZAÇÃO COMPLETA (tudo num arquivo só)
+Site inteiro atualizado, SEM o js/config.js (suas chaves do Supabase ficam como estão no GitHub).
+
+O QUE TEM DE NOVO
+- Senha forte + bloqueio de tentativas; links "Entrar como funcionário/cliente"
+- Quiz oficial (20 perguntas) | moeda 1 AC = R$ 1
+- Visual novo do cliente (começa neutro, troca de cor ao entrar na casa)
+- Primeiro acesso (nome, nascimento, tempo de jogo, o que motiva) + Admin > Jogadores
+- NOVO: recarga por PIX no app, em pacotes com bônus (o saldo atualiza sozinho quando o banco confirma)
+- NOVO: login por WhatsApp (código de 6 dígitos) — o e-mail+senha continua como alternativa
+- NOVO: investidores (Covil do Dragão): cotas, rendimento mensal em AC e buff de XP; Admin > Pacotes e Admin > Investidores
+
+PARTE 1 — COLOCAR O SITE NO AR (obrigatório, 5 minutos)
+1) SQL Editor do projeto arcade, rodar nesta ordem, um por vez (só os que ainda não rodou):
+   sql/03_ajuste_moeda_1ac_1real.sql
+   sql/04_cadastro_pesquisa_jogador.sql
+   sql/05_pix_whatsapp_investidores.sql
+2) GitHub > repositório arcade > Add file > Upload files: arrastar o CONTEÚDO da pasta descompactada
+   (css, js, sql, supabase, cliente, funcionario, index.html, README.md) e fazer o commit.
+3) Seu admin (SQL Editor):
+   insert into public.papeis_usuarios (usuario_id, papel)
+   select id, 'admin' from auth.users where email = 'amandabl1313@gmail.com' on conflict do nothing;
+
+PARTE 2 — LIGAR O PIX (Mercado Pago)  [sem isso, a tela de pacotes avisa que o PIX não está pronto]
+1) No Mercado Pago: Seus negócios > Configurações > Credenciais. Crie uma aplicação e copie o Access Token.
+   (Comece com o de TESTE; depois troque pelo de PRODUÇÃO.) Atenção: o dinheiro cai na conta dona dessa aplicação.
+2) Supabase > Edge Functions > Deploy a new function > "Via Editor". Crie duas funções e cole o código dos arquivos:
+   - nome: criar-recarga-pix   (arquivo supabase/functions/criar-recarga-pix/index.ts)
+   - nome: webhook-pix         (arquivo supabase/functions/webhook-pix/index.ts)  -> nesta, DESLIGUE "Verify JWT"
+3) Supabase > Edge Functions > Secrets: criar MP_ACCESS_TOKEN com o token do passo 1.
+4) Teste: deixe um pacote barato (Admin > Pacotes, ex.: R$ 1,00 = 1 AC), pague pelo app e veja o saldo subir sozinho.
+
+PARTE 3 — LIGAR O LOGIN POR WHATSAPP  [sem isso, o botão "Receber código" dá erro; o e-mail continua funcionando]
+Precisa de uma API que envie mensagem de WhatsApp (o servidor de WhatsApp que você já usa na AFBTech serve).
+1) Abra supabase/functions/whatsapp-codigo/index.ts e ajuste a função enviarWhatsApp() ao formato da SUA API.
+2) Supabase > Edge Functions: crie a função "whatsapp-codigo" colando o código (pode deixar Verify JWT desligado).
+3) Edge Functions > Secrets: WHATSAPP_API_URL e WHATSAPP_API_TOKEN.
+4) Authentication > Sign In / Providers > Phone: ativar. (Se pedir provedor de SMS, escolha qualquer um: o hook abaixo substitui.)
+5) Authentication > Auth Hooks > Send SMS hook: ativar, tipo HTTPS, URL:
+   https://pcokxfpvrcpkekcfxptv.supabase.co/functions/v1/whatsapp-codigo
+   Gere o segredo (começa com v1,whsec_) e salve em Edge Functions > Secrets como SEND_SMS_HOOK_SECRET.

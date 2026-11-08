@@ -19,6 +19,8 @@ js/dados/quiz.js        perguntas do quiz (PROVISÓRIAS — trocar pelas oficiai
 js/dados/adicionais.js  adicionais do hambúrguer personalizado
 sql/01_banco_completo.sql   cria todo o banco (rodar uma vez)
 sql/02_cardapio_inicial.sql cardápio provisório para testar
+sql/03_ajuste_moeda_1ac_1real.sql  só se o banco foi criado com a regra antiga de moeda
+sql/04_cadastro_pesquisa_jogador.sql  perguntas do primeiro acesso + aba Admin → Jogadores
 ```
 
 ## Colocar no ar (ordem)
@@ -52,7 +54,7 @@ sql/02_cardapio_inicial.sql cardápio provisório para testar
 ## O que ainda é provisório
 
 - **Quiz:** 20 perguntas genéricas em `js/dados/quiz.js`. Troque pelas oficiais (3 respostas por pergunta, uma por facção).
-- **Regra de XP e curva de níveis:** 1 XP por AC e 50.000 XP por nível. Editáveis em *Admin → Regras e níveis*.
+- **Regra de XP e curva de níveis:** 1 XP por AC e 100 XP por nível. Editáveis em *Admin → Regras e níveis*.
 - **Cardápio:** itens e preços de exemplo; edite em *Admin → Cardápio*.
 - **Cores das facções:** em `css/base.css` (variáveis `--guilda`, `--frequencia`, `--esquadrao`).
 

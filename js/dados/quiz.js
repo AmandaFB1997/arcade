@@ -1,26 +1,26 @@
-// QUIZ DE FACÇÃO — PERGUNTAS PROVISÓRIAS (20).
-// Substitua pelas oficiais dos sócios. Cada pergunta tem 3 respostas, uma por facção.
+// QUIZ DE FACÇÃO — 20 PERGUNTAS OFICIAIS (documento "perguntas para as casas").
+// Cada resposta é a de um líder de facção: Lúcio = Guilda, Fabiano = Frequência, Amanda = Esquadrão.
 // A ordem das respostas é embaralhada na tela para a facção não depender da posição.
 // Formato: { p: 'pergunta', r: { guilda: '...', frequencia: '...', esquadrao: '...' } }
 export const PERGUNTAS = [
-  { p: 'Sábado à noite com a turma. Seu papel é…', r: { guilda: 'Montar a estratégia da mesa', frequencia: 'Colocar a playlist e animar o clima', esquadrao: 'Chamar o pessoal e organizar a partida' } },
-  { p: 'Num jogo de tabuleiro novo, você…', r: { guilda: 'Lê o manual inteiro antes', frequencia: 'Aprende jogando e improvisa', esquadrao: 'Ensina quem está perdido' } },
-  { p: 'Na hora de pedir, você prefere…', r: { guilda: 'Um prato elaborado, diferente', frequencia: 'Algo para dividir e beliscar', esquadrao: 'O que todo mundo da mesa vai pedir' } },
-  { p: 'Ganhar é…', r: { guilda: 'Provar que o plano estava certo', frequencia: 'Curtir o momento, ganhando ou não', esquadrao: 'Uma vitória do grupo' } },
-  { p: 'Um bom jogo de RPG precisa de…', r: { guilda: 'Regras sólidas e história profunda', frequencia: 'Cenas marcantes e muita emoção', esquadrao: 'Missões em equipe' } },
-  { p: 'Quando perde, você…', r: { guilda: 'Analisa o que errou', frequencia: 'Ri e pede revanche', esquadrao: 'Anima o time para a próxima' } },
-  { p: 'Seu lugar ideal na casa é…', r: { guilda: 'A mesa do canto, mais reservada', frequencia: 'Perto do som e do movimento', esquadrao: 'A mesa grande do centro' } },
-  { p: 'Quem você leva para jogar?', r: { guilda: 'Um rival à altura', frequencia: 'Os amigos mais animados', esquadrao: 'A turma toda' } },
-  { p: 'Num videogame cooperativo, você é…', r: { guilda: 'O tático, que planeja', frequencia: 'O que faz a jogada ousada', esquadrao: 'O suporte, que cobre todo mundo' } },
-  { p: 'Uma noite perfeita termina com…', r: { guilda: 'Uma partida épica e longa', frequencia: 'Música, risada e mais uma rodada', esquadrao: 'Foto da turma e combinando a próxima' } },
-  { p: 'Sobre regras de casa, você…', r: { guilda: 'Gosta de cada detalhe definido', frequencia: 'Prefere flexibilidade', esquadrao: 'Decide em grupo' } },
-  { p: 'O que mais te atrai num lugar assim?', r: { guilda: 'O desafio e a profundidade dos jogos', frequencia: 'A atmosfera e a experiência', esquadrao: 'Encontrar e fazer amizades' } },
-  { p: 'Torneio na casa: você…', r: { guilda: 'Entra para ganhar', frequencia: 'Entra pela festa', esquadrao: 'Monta uma equipe' } },
-  { p: 'Cardápio novo: você…', r: { guilda: 'Pesquisa os ingredientes', frequencia: 'Pede o que parece mais divertido', esquadrao: 'Pede o que o grupo indicar' } },
-  { p: 'Seu superpoder numa mesa é…', r: { guilda: 'Memória e cálculo', frequencia: 'Carisma', esquadrao: 'Liderança' } },
-  { p: 'Jogo longo, 3 horas. Você…', r: { guilda: 'Adora', frequencia: 'Precisa de pausas e petiscos', esquadrao: 'Topa se a turma topar' } },
-  { p: 'Na cena de um filme de fantasia, você é…', r: { guilda: 'O mago estudioso', frequencia: 'O bardo', esquadrao: 'O guerreiro da linha de frente' } },
-  { p: 'Para você, o melhor da casa é…', r: { guilda: 'O acervo de jogos', frequencia: 'O clima e o som', esquadrao: 'A comunidade' } },
-  { p: 'Sobre o placar da casa, você…', r: { guilda: 'Quer entender como é calculado', frequencia: 'Olha por diversão', esquadrao: 'Quer ver sua facção na frente' } },
-  { p: 'Última pergunta: o que combina com você?', r: { guilda: 'Estratégia', frequencia: 'Energia', esquadrao: 'União' } },
+  { p: "Como seria a sua sexta-feira à noite perfeita?", r: { guilda: "Jogando com amigos.", frequencia: "Consigo sair na mão nos treinos e vou para casa ficar de boa.", esquadrao: "Comidinha mó sussa, programar, jogar um pouco e uma cervejinha." } },
+  { p: "Em um grupo de amigos ou em uma equipe de trabalho, qual costuma ser o seu papel principal?", r: { guilda: "O de amigo.", frequencia: "Liderança.", esquadrao: "A apaziguadora, na maioria das vezes." } },
+  { p: "Quando você se depara com um problema muito difícil ou um \"chefão\" na vida real, qual é a sua primeira atitude?", r: { guilda: "Faço side quests e ganho experiência para ficar mais forte e voltar para enfrentá-lo.", frequencia: "Estudo a característica dele para saber suas motivações e fragilidades.", esquadrao: "Monto uma estratégia." } },
+  { p: "Ao entrar em um bar, restaurante ou evento que você não conhece, para onde você olha primeiro ou onde escolhe sentar?", r: { guilda: "Perto da área kids.", frequencia: "Onde consigo olhar toda a movimentação, e nunca de costas para a porta.", esquadrao: "No fundo, onde não tem ninguém: vejo o ambiente todo e não tem muito barulho." } },
+  { p: "Como você lida com as regras (num jogo de tabuleiro, num videogame ou num projeto)?", r: { guilda: "Tranquilo.", frequencia: "Lido bem com regras se fazem sentido.", esquadrao: "Sigo todas." } },
+  { p: "Se você tivesse o fim de semana inteiro livre para maratonar algo, o que escolheria assistir ou jogar?", r: { guilda: "Jogar jogos imersivos.", frequencia: "Prefiro ir pro rio, mas se for obrigado a ficar em casa, assistiria conteúdos de investigação e/ou westerns modernos.", esquadrao: "Star Wars." } },
+  { p: "Que tipo de universo ficcional mais te fascina e te faz querer viver nele?", r: { guilda: "O Cosmere, de Brandon Sanderson, me fascina, mas estou feliz no mundo real.", frequencia: "Atualmente o western moderno, mas também o mundo de Yellowstone.", esquadrao: "Star Wars, pô." } },
+  { p: "Qual é a sua trilha sonora perfeita para focar em uma tarefa importante?", r: { guilda: "Epic rock.", frequencia: "John Mayer e solos de guitarra.", esquadrao: "Música antiga." } },
+  { p: "Se você pudesse ter um único item lendário da cultura pop exposto na sua estante, qual seria?", r: { guilda: "Um só? Vixe! O Grimório de Merlin.", frequencia: "A guitarra Stratocaster do Jimi Hendrix.", esquadrao: "Não sei. Nunca pensei nisso." } },
+  { p: "Que gênero te afasta em um filme, série ou jogo?", r: { guilda: "Terror.", frequencia: "Ficção científica.", esquadrao: "Romance." } },
+  { p: "Qual é a sua \"arma\" ou plataforma de jogos favorita, aquela com a qual você se sente mais confortável?", r: { guilda: "Console.", frequencia: "Steam.", esquadrao: "PC." } },
+  { p: "Em um jogo (RPG de mesa ou videogame), qual perfil de personagem você escolhe instintivamente?", r: { guilda: "Paladino.", frequencia: "Druida porradeiro.", esquadrao: "O estrategista." } },
+  { p: "Qual é o seu nível de competitividade quando joga com seus amigos?", r: { guilda: "Extremamente competitivo durante o jogo, mas me divirto até com a derrota.", frequencia: "Alto. A ponto de jogar o controle na cara do cara quando eu ganho.", esquadrao: "Depende de quem joga contra mim. De boa com quem é de boa, mas elevo o nível quando alguém eleva o nível comigo." } },
+  { p: "O que é mais imperdoável e te faz abandonar um jogo?", r: { guilda: "Jogo sem história, ou sem amigos para compartilhar a diversão.", frequencia: "Jogo mole demais, que te guia pelo caminho o tempo todo.", esquadrao: "Quando tem alguém roubando." } },
+  { p: "Quando o assunto é jogar em grupo, que tipo de jogo você gosta?", r: { guilda: "Jogos estratégicos e competitivos.", frequencia: "Jogos antigos, tipo Counter-Strike e Need for Speed.", esquadrao: "Jogos cooperativos." } },
+  { p: "Como é a sua relação diária com novas tecnologias, gadgets e inovações?", r: { guilda: "Uso o necessário e avalio os outros testando, para ver se faz sentido.", frequencia: "Gosto pra caramba.", esquadrao: "Da hora, me empolga muito." } },
+  { p: "Se você tivesse uma máquina do tempo com apenas uma viagem de ida, para qual época iria?", r: { guilda: "Estou feliz vivendo o agora.", frequencia: "Para a época da minha adolescência.", esquadrao: "1970, quando começou o desenvolvimento tecnológico." } },
+  { p: "Além do básico, como celular e carteira, qual objeto você considera essencial na sua rotina?", r: { guilda: "Roupa.", frequencia: "Canivete.", esquadrao: "Meus óculos." } },
+  { p: "Quando precisa aprender uma habilidade totalmente nova, qual é o seu método favorito?", r: { guilda: "Hiperfoco.", frequencia: "ChatGPT.", esquadrao: "YouTube." } },
+  { p: "Se a sua vida fosse um gênero de cinema ou literatura nerd, qual seria a capa da sua história?", r: { guilda: "Um conjurador cheio de cicatrizes antigas ensinando, contente, uma magia simples a um jovem aprendiz.", frequencia: "Uma mistura de Mr. Robot com Sons of Anarchy.", esquadrao: "Alien, o 8º Passageiro." } },
 ];

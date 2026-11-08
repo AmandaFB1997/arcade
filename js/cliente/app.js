@@ -1,21 +1,42 @@
 // App do CLIENTE — O Conclave
-import { sb, configurado, $, $$, esc, fmtNum, fmtReais, fmtAC, fmtAcReais, toast, abrirModal, fecharModal,
+import { sb, configurado, $, $$, esc, fmtNum, fmtAC, fmtAcReais, toast, abrirModal, fecharModal,
          avisoSemConfig, comTrava, erroAmigavel, NOME_FACCAO } from '../nucleo.js';
 import { sessaoAtual, montarLogin, sair } from '../auth.js';
 import { PERGUNTAS } from '../dados/quiz.js';
 import { ADICIONAIS } from '../dados/adicionais.js';
 
 const raiz = document.getElementById('app');
+const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
+const ICONE = {
+  inicio: svg('<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>'),
+  cardapio: svg('<path d="M4 4v7a3 3 0 003 3v6"/><path d="M7 4v6"/><path d="M10 4v7a3 3 0 01-3 3"/><path d="M17 4c-2 1-3 3-3 6s1 4 3 4v6"/>'),
+  comanda: svg('<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>'),
+  guerra: svg('<path d="M14 4l6 6-9 9-6-6z"/><path d="M5 19l-2 2"/><path d="M4 4l6 6"/>'),
+  perfil: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>'),
+};
+// Sigilo de cada casa + o do Iniciado (silhueta)
+const SIGILO = {
+  guilda: svg('<path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z"/><circle cx="12" cy="12" r="2"/>'),
+  frequencia: svg('<path d="M2 12h3l2-6 3 12 3-16 3 14 2-8 2 4h2"/>'),
+  esquadrao: svg('<path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M12 7v10M8 11h8"/>'),
+  iniciado: svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/>'),
+};
+const LOGO = svg('<path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 8l4 2.3v4.4L12 17l-4-2.3v-4.4z"/>');
+const TEXTO_CASA = {
+  guilda: 'Estrategistas e contadores de histórias. Quem lê o manual até o fim e ainda inventa a regra da casa.',
+  frequencia: 'Instinto, ritmo e presença. Você sente a mesa antes de ler o jogo.',
+  esquadrao: 'Quem leva a turma junto. A vitória só vale quando é dividida.',
+};
 const TELAS = [
-  ['inicio', '🏠', 'Início'], ['cardapio', '🍔', 'Cardápio'], ['comanda', '🧾', 'Comanda'],
-  ['guerra', '⚔️', 'Guerra'], ['perfil', '👤', 'Perfil'],
+  ['inicio', 'Início'], ['cardapio', 'Cardápio'], ['comanda', 'Comanda'], ['guerra', 'Guerra'], ['perfil', 'Perfil'],
 ];
+const dorme = ms => new Promise(r => setTimeout(r, ms));
 const CATEGORIAS = { comida: 'Comida', bebida: 'Bebidas', jogo: 'Jogos', kids: 'Kids', personalizado: 'Monte o seu' };
 
 const S = {
   user: null, perfil: null, niveis: [], cfg: {}, cardapio: [], comanda: null, itens: [],
-  criancas: [], tela: 'inicio', categoria: 'todos',
-  quiz: { ordem: {}, empate: null },
+  criancas: [], cotas: [], pedido: null, tela: 'inicio', categoria: 'todos',
+  quiz: { ordem: {}, empate: null, comecou: false },
 };
 let iniciado = false;
 
@@ -32,6 +53,8 @@ async function carregar() {
   if (!perfil) throw new Error('Seu perfil não foi criado. Peça ao administrador para conferir o banco.');
   S.perfil = perfil; S.niveis = niveis; S.cardapio = cardapio;
   S.cfg = Object.fromEntries(cfg.map(c => [c.chave, Number(c.valor)]));
+  S.cotas = await sb.from('cotas_investidor').select('*').eq('usuario_id', S.user.id).eq('ativo', true)
+    .then(r => r.error ? [] : r.data, () => []);
   await carregarComanda();
 }
 
@@ -51,18 +74,19 @@ const totalComanda = () => S.itens.reduce((t, i) => t + i.preco_ac * i.quantidad
 /* ---------- estrutura ---------- */
 function desenhar() {
   document.body.dataset.faccao = S.perfil?.faccao || '';
+  document.body.classList.toggle('modo-quiz', S.tela === 'quiz' && !S.perfil?.faccao);
   if (!$('#main')) {
     raiz.innerHTML = `
-      <header class="topo linha"><span class="marca">⚔️ O CONCLAVE</span><span class="saldo" id="saldo"></span></header>
+      <header class="topo linha"><span class="marca">${LOGO} O CONCLAVE</span><button class="saldo" id="saldo" data-ir="carteira" aria-label="Carregar moedas"></button></header>
       <main id="main"></main>
-      <nav class="nav-baixo">${TELAS.map(([id, ic, nome]) =>
-        `<button data-tela="${id}"><span>${ic}</span>${nome}<b class="contador" id="cnt-${id}" hidden></b></button>`).join('')}</nav>`;
+      <nav class="nav-baixo">${TELAS.map(([id, nome]) =>
+        `<button data-tela="${id}">${ICONE[id]}${nome}<b class="contador" id="cnt-${id}" hidden></b></button>`).join('')}</nav>`;
   }
-  $('#saldo').textContent = fmtReais(S.perfil.saldo_ac);
+  $('#saldo').textContent = fmtAC(S.perfil.saldo_ac);
   $$('.nav-baixo button').forEach(b => b.classList.toggle('ativo', b.dataset.tela === S.tela));
   const cnt = $('#cnt-comanda');
   cnt.hidden = S.itens.length === 0; cnt.textContent = S.itens.length;
-  const vistas = { inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz };
+  const vistas = { carteira: vCarteira, covil: vCovil, inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz };
   const tela = vistas[S.tela] || vInicio;
   Promise.resolve(tela()).then(html => { if ($('#main')) { $('#main').innerHTML = html; } })
     .catch(e => { $('#main').innerHTML = `<div class="cartao aviso">${esc(erroAmigavel(e))}</div>`; });
@@ -77,28 +101,38 @@ function vInicio() {
   const prox = S.niveis.find(n => n.nivel === p.nivel + 1);
   const base = atual?.xp_necessario ?? 0;
   const pct = prox ? Math.max(0, Math.min(100, ((p.xp - base) / (prox.xp_necessario - base)) * 100)) : 100;
+  const rank = p.faccao ? `${NOME_FACCAO[p.faccao]} · Nível ${p.nivel}` : 'Iniciado · Nível 0';
   return `
-    <section class="cartao">
-      <h2>Olá, ${esc(p.nome_exibicao)}</h2>
-      ${p.faccao ? `<span class="chip ${p.faccao}">${NOME_FACCAO[p.faccao]}</span>` : '<span class="chip">Iniciado</span>'}
-      <p class="saldo" style="font-size:1.6rem;margin:12px 0 0">${fmtReais(p.saldo_ac)}</p>
-      <small>${fmtAC(p.saldo_ac)} de saldo${p.saldo_ac < 0 ? ' — a diferença é cobrada em reais no fechamento' : ''}</small>
+    <section class="cartao heroi">
+      <div class="avatar ${p.faccao ? '' : 'iniciado'}">${SIGILO[p.faccao || 'iniciado']}</div>
+      <div>
+        <div class="titulo-rank">${rank}</div>
+        <h2>${esc(p.nome_exibicao)}</h2>
+        <p class="moedas">${fmtNum(p.saldo_ac)} <small>AC</small></p>
+        <button class="botao pequeno" data-ir="carteira">+ Carregar moedas</button>
+        ${p.saldo_ac < 0 ? '<small>A diferença é cobrada em reais no fechamento.</small>' : ''}
+      </div>
     </section>
-    <section class="cartao">
-      <div class="linha"><h3>Nível ${p.nivel}</h3><small>${fmtNum(p.xp)} XP</small></div>
-      <div class="barra"><i style="width:${pct}%"></i></div>
+    ${p.faccao ? `
+    <section class="cartao xp-bloco">
+      <div class="linha"><h3>Nível ${p.nivel}</h3><small class="preco">${fmtNum(p.xp)} XP</small></div>
+      <div class="barra" style="margin:10px 0 6px"><i style="width:${pct}%"></i></div>
       <small>${prox ? `Próximo nível: ${fmtNum(prox.xp_necessario)} XP` : 'Nível máximo'}</small>
-    </section>
-    ${p.faccao ? '' : `
-    <section class="cartao aviso">
-      <h3>🔒 Cofre de Cristal</h3>
-      <p>Você tem <strong>${fmtNum(p.xp_bloqueado)} XP</strong> guardado. Faça o quiz, descubra sua facção e libere tudo.</p>
-      <button class="botao primario" data-ir="quiz">Descobrir minha facção</button>
+    </section>` : `
+    <section class="cartao aviso cofre">
+      <div class="tranca">🔒</div>
+      <h3>Cofre de Cristal</h3>
+      <div class="xp-pend">${fmtNum(p.xp_bloqueado)} XP trancados</div>
+      <p class="sub" style="margin:6px 0 16px">Os deuses do Conclave ainda não conhecem a sua verdadeira natureza. Faça o Teste de Calibração e libere tudo.</p>
+      <button class="botao primario" data-ir="quiz">Iniciar o teste</button>
     </section>`}
+    ${S.cotas.length ? `<section class="cartao dourado"><h3>🐉 Covil do Dragão</h3>
+      <p class="sub" style="margin:4px 0 12px">Você é da Sociedade Secreta. Veja suas cotas e rendimentos.</p>
+      <button class="botao" data-ir="covil">Abrir o Covil</button></section>` : ''}
     <section class="cartao">
       <h3>Comanda</h3>
       ${S.comanda
-        ? `<p>Mesa <strong>${esc(S.comanda.mesa)}</strong> · ${S.itens.length} item(ns) · ${fmtReais(totalComanda())}</p>
+        ? `<p>Mesa <strong>${esc(S.comanda.mesa)}</strong> · ${S.itens.length} item(ns) · <span class="preco">${fmtAC(totalComanda())}</span></p>
            <button class="botao" data-ir="comanda">Ver comanda</button>`
         : '<p class="sub">Nenhuma comanda aberta. Peça algo do cardápio para começar.</p><button class="botao primario" data-ir="cardapio">Ver cardápio</button>'}
     </section>`;
@@ -115,7 +149,7 @@ function vCardapio() {
         <div>
           <h3>${esc(i.nome)}</h3>
           ${i.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span>` : ''}
-          <div class="preco">${fmtAC(i.preco_ac)} <small>(${fmtReais(i.preco_ac)})</small>${i.categoria === 'personalizado' ? ' <small>+ adicionais</small>' : ''}</div>
+          <div class="preco">${fmtAC(i.preco_ac)}${i.categoria === 'personalizado' ? ' <small>+ adicionais</small>' : ''}</div>
         </div>
         <button class="botao" data-add="${i.id}">${i.categoria === 'personalizado' ? 'Montar' : 'Pedir'}</button>
       </div>`).join('') : '<p class="vazio">Cardápio vazio. Peça ao administrador para cadastrar os itens.</p>'}`;
@@ -126,7 +160,7 @@ function vComanda() {
   const total = totalComanda();
   return `
     <section class="cartao">
-      <div class="linha"><h2>Mesa ${esc(S.comanda.mesa)}</h2><span class="preco">${fmtReais(total)}</span></div>
+      <div class="linha"><h2>Mesa ${esc(S.comanda.mesa)}</h2><span class="preco">${fmtAC(total)}</span></div>
       ${S.itens.length ? S.itens.map(i => `
         <div class="linha" style="padding:8px 0;border-top:1px solid var(--borda)">
           <div>${i.quantidade}× ${esc(i.cardapio?.nome || 'Item')}
@@ -134,7 +168,7 @@ function vComanda() {
           <span class="chip ${i.status}">${i.status}</span>
         </div>`).join('') : '<p class="sub">Ainda sem itens.</p>'}
     </section>
-    <p class="sub">A conta é fechada na mesa pelo garçom. Saldo atual: ${fmtReais(S.perfil.saldo_ac)} → depois: ${fmtReais(S.perfil.saldo_ac - total)}.</p>`;
+    <p class="sub">A conta é fechada na mesa pelo garçom. Saldo atual: ${fmtAC(S.perfil.saldo_ac)} → depois: ${fmtAC(S.perfil.saldo_ac - total)}.</p>`;
 }
 
 async function vGuerra() {
@@ -160,6 +194,10 @@ async function vPerfil() {
         <button class="botao" type="submit">Salvar nome</button></form>
     </section>
     <section class="cartao">
+      <h2>Sobre você</h2>
+      <form id="f-cadastro-perfil">${camposCadastro(S.perfil)}<button class="botao" type="submit">Salvar</button></form>
+    </section>
+    <section class="cartao">
       <h2>Crianças</h2>
       <p class="sub">Para o Kids. Sem CPF, sem e-mail, sem XP — só o nome.</p>
       ${S.criancas.map(c => `<div class="linha" style="padding:6px 0"><span>🧒 ${esc(c.nome)}</span>
@@ -171,22 +209,151 @@ async function vPerfil() {
     <button class="botao perigo" data-acao="sair" style="width:100%">Sair da conta</button>`;
 }
 
+/* ---------- carteira: carregar moedas por PIX ---------- */
+const brl = n => Number(n).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+let pararEspera = null;
+
+async function vCarteira() {
+  if (S.pedido) return vPix();
+  const [pacotes, hist] = await Promise.all([
+    sb.from('pacotes_recarga').select('*').eq('ativo', true).order('ordem').then(r => r.error ? [] : r.data),
+    sb.from('livro_saldo').select('*').eq('usuario_id', S.user.id).in('tipo', ['recarga', 'recarga_pix', 'rendimento'])
+      .order('criado_em', { ascending: false }).limit(5).then(r => r.error ? [] : r.data),
+  ]);
+  return `
+    <section class="cartao heroi"><div>
+      <div class="titulo-rank">Seu saldo</div>
+      <p class="moedas" style="margin:2px 0 0">${fmtNum(S.perfil.saldo_ac)} <small>AC</small></p>
+    </div></section>
+    <h2 style="margin:18px 0 10px">Carregar moedas</h2>
+    <p class="sub" style="margin-top:0">Pague com PIX. Assim que o banco confirmar, as moedas caem aqui.</p>
+    ${pacotes.length ? pacotes.map(p => {
+      const bonus = Math.round((p.valor_ac / Number(p.valor_reais) - 1) * 100);
+      return `<button class="pacote ${p.destaque ? 'destaque' : ''}" data-pacote="${p.id}">
+        ${p.destaque ? '<span class="selo-pacote">Mais escolhido</span>' : ''}
+        <span><strong>${esc(p.nome)}</strong><br><small>${brl(p.valor_reais)} no PIX</small></span>
+        <span class="pacote-ac"><b>${fmtNum(p.valor_ac)} AC</b>${bonus > 0 ? `<em>+${bonus}% de bônus</em>` : ''}</span></button>`;
+    }).join('') : '<p class="vazio">Nenhum pacote disponível agora. Peça a recarga ao garçom.</p>'}
+    <p class="sub" style="margin-top:14px">Prefere pagar no balcão? O garçom também faz a recarga.</p>
+    ${hist.length ? `<h3 style="margin:20px 0 8px">Últimas recargas</h3>${hist.map(h => `
+      <div class="linha" style="padding:7px 0;border-top:1px solid var(--borda)"><span>${h.tipo === 'rendimento' ? '🐉 Rendimento' : 'Recarga'}
+      <small>· ${new Date(h.criado_em).toLocaleDateString('pt-BR')}</small></span><span class="preco">+${fmtNum(h.valor_ac)} AC</span></div>`).join('')}` : ''}`;
+}
+
+function vPix() {
+  const p = S.pedido;
+  return `
+    <section class="cartao pix">
+      <div class="titulo-rank">Pague com PIX</div>
+      <h2 style="margin:4px 0">${brl(p.valor_reais)} <small style="color:var(--texto-2)">→ ${fmtNum(p.valor_ac)} AC</small></h2>
+      <img class="qr" alt="QR Code do PIX" src="data:image/png;base64,${esc(p.pix_qr_base64)}">
+      <button class="botao primario" id="copiar-pix">Copiar código PIX</button>
+      <p class="sub" style="margin:12px 0 0">Abra o app do seu banco, escolha <strong>PIX → Copia e Cola</strong> ou leia o QR Code.</p>
+      <p class="aguardando"><span class="ponto"></span> Aguardando o pagamento… <small id="pix-tempo"></small></p>
+      <button class="botao link" data-acao="cancelar-pix">Voltar</button>
+    </section>`;
+}
+
+async function escolherPacote(id) {
+  const { data, error } = await sb.functions.invoke('criar-recarga-pix', { body: { pacote_id: id } });
+  if (error) {
+    let msg = 'Não foi possível gerar o PIX agora.';
+    try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* mantém a mensagem padrão */ }
+    throw new Error(msg);
+  }
+  if (data?.erro) throw new Error(data.erro);
+  S.pedido = data; desenhar(); esperarPagamento(data.pedido_id);
+}
+
+// Espera o pagamento: ouve o banco em tempo real e, por garantia, confere a cada 4 s.
+function esperarPagamento(pedidoId) {
+  pararEspera?.();
+  let ativo = true;
+  const conferir = async () => {
+    if (!ativo) return;
+    const r = await sb.from('pedidos_recarga').select('status').eq('id', pedidoId).maybeSingle();
+    if (r.data?.status === 'pago') { ativo = false; pararEspera?.(); await pagou(); }
+    else if (r.data && ['expirado', 'cancelado'].includes(r.data.status)) { ativo = false; pararEspera?.(); S.pedido = null; toast('O PIX venceu. Gere outro.', 'erro'); desenhar(); }
+  };
+  const canal = sb.channel('pix-' + pedidoId)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pedidos_recarga', filter: `id=eq.${pedidoId}` }, conferir).subscribe();
+  const timer = setInterval(() => {
+    conferir();
+    const el = $('#pix-tempo'); if (el && S.pedido?.expira_em) {
+      const seg = Math.max(0, Math.floor((new Date(S.pedido.expira_em) - Date.now()) / 1000));
+      el.textContent = `(vence em ${Math.floor(seg / 60)}:${String(seg % 60).padStart(2, '0')})`;
+    }
+  }, 4000);
+  pararEspera = () => { ativo = false; clearInterval(timer); sb.removeChannel(canal); pararEspera = null; };
+}
+
+async function pagou() {
+  const ac = S.pedido?.valor_ac; S.pedido = null;
+  await recarregarPerfil();
+  const o = document.createElement('div');
+  o.id = 'revelacao'; o.dataset.faccao = S.perfil.faccao || '';
+  o.innerHTML = `<div class="onda"></div><div class="conteudo">
+    <div class="selo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M9 9.5c0-1 1.3-1.7 3-1.7s3 .7 3 1.7-1.3 1.6-3 2.2-3 1.1-3 2.2 1.3 1.7 3 1.7 3-.7 3-1.7"/></svg></div>
+    <p class="pre">Pagamento confirmado</p>
+    <h1>+${fmtNum(ac)} AC</h1>
+    <p class="txt">As moedas já estão na sua carteira.</p>
+    <button class="botao primario" data-fechar-rev>Bora jogar</button></div>`;
+  document.body.appendChild(o);
+}
+
+/* ---------- Covil do Dragão (investidores) ---------- */
+async function vCovil() {
+  if (!S.cotas.length) return '<p class="vazio">Esta área é só para a Sociedade Secreta.</p>';
+  const rend = await sb.from('rendimentos_investidor').select('*').eq('usuario_id', S.user.id).order('competencia', { ascending: false })
+    .then(r => r.error ? [] : r.data);
+  const total = rend.reduce((t, r) => t + Number(r.valor_ac), 0);
+  const buff = S.cotas.reduce((t, c) => t + Number(c.bonus_xp_percentual), 0);
+  return `
+    <section class="cartao dourado heroi"><div class="avatar" style="color:#ffc83d">🐉</div><div>
+      <div class="titulo-rank" style="color:#ffc83d">Sociedade Secreta</div><h2>Covil do Dragão</h2>
+      <p class="sub" style="margin:0">Rendimentos pagos: <strong class="preco" style="color:#ffc83d">${fmtNum(total)} AC</strong></p></div></section>
+    ${buff > 0 ? `<section class="cartao dourado"><h3>⚡ Buff de XP</h3><p style="margin:0">Todo XP que você ganha no consumo vem com <strong>+${buff}%</strong>.</p></section>` : ''}
+    <h3 style="margin:16px 0 8px">Suas cotas</h3>
+    ${S.cotas.map(c => `<div class="cartao"><strong>${esc(c.descricao)}</strong>
+      <div class="sub">${Number(c.participacao_percentual) ? `Participação ${Number(c.participacao_percentual).toLocaleString('pt-BR')}%` : ''}
+      ${Number(c.bonus_xp_percentual) ? ` · XP +${Number(c.bonus_xp_percentual)}%` : ''}</div></div>`).join('')}
+    <h3 style="margin:16px 0 8px">Rendimentos</h3>
+    ${rend.length ? rend.map(r => `<div class="linha" style="padding:8px 0;border-top:1px solid var(--borda)">
+      <span>${new Date(r.competencia + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</span>
+      <span class="preco" style="color:#ffc83d">+${fmtNum(r.valor_ac)} AC</span></div>`).join('')
+      : '<p class="sub">O primeiro rendimento aparece aqui quando for pago. Ele cai direto no seu saldo, para gastar na casa.</p>'}
+    <button class="botao" data-ir="inicio" style="margin-top:14px;width:100%">Voltar</button>`;
+}
+
 /* ---------- quiz ---------- */
 async function vQuiz() {
   if (S.perfil.faccao) {
-    return `<section class="cartao"><h2>Sua facção</h2><span class="chip ${S.perfil.faccao}">${NOME_FACCAO[S.perfil.faccao]}</span>
-      <p class="sub">A calibração é definitiva.</p><button class="botao" data-ir="inicio">Voltar</button></section>`;
+    return `<section class="cartao heroi"><div class="avatar">${SIGILO[S.perfil.faccao]}</div><div><div class="titulo-rank">Sua casa</div><h2>${NOME_FACCAO[S.perfil.faccao]}</h2>
+      <p class="sub">A calibração é definitiva.</p><button class="botao pequeno" data-ir="inicio">Voltar</button></div></section>`;
   }
   const respostas = ok(await sb.from('respostas_quiz').select('pergunta_id,resposta').eq('usuario_id', S.user.id));
   const feitas = new Set(respostas.map(r => r.pergunta_id));
   const i = PERGUNTAS.findIndex((_, idx) => !feitas.has(idx));
   if (i === -1) return vQuizFim(respostas);
+  if (feitas.size === 0 && !S.quiz.comecou) {
+    return `<div class="quiz-tela"><div class="quiz-topo"><button class="sair" data-ir="inicio" aria-label="Sair">✕</button></div>
+      <div class="quiz-centro">
+        <div class="scan">${SIGILO.iniciado}</div>
+        <h1>Teste de Calibração</h1>
+        <p class="regras">${PERGUNTAS.length} perguntas, uns 3 minutos.<br>Responda no instinto: não existe certo ou errado.<br>No final, o Conclave revela a sua casa.</p>
+        <button class="botao primario" data-quiz="comecar">Começar</button>
+      </div></div>`;
+  }
   if (!S.quiz.ordem[i]) S.quiz.ordem[i] = Object.keys(PERGUNTAS[i].r).sort(() => Math.random() - .5);
+  const pips = PERGUNTAS.map((_, k) => `<i class="${k < i ? 'feito' : k === i ? 'atual' : ''}"></i>`).join('');
   return `
-    <p class="sub">Pergunta ${i + 1} de ${PERGUNTAS.length}</p>
-    <div class="barra"><i style="width:${(i / PERGUNTAS.length) * 100}%"></i></div>
-    <h2 class="pergunta">${esc(PERGUNTAS[i].p)}</h2>
-    ${S.quiz.ordem[i].map(f => `<button class="botao opcao" data-resp="${i}|${f}">${esc(PERGUNTAS[i].r[f])}</button>`).join('')}`;
+    <div class="quiz-tela" id="q-${i}">
+      <div class="quiz-topo"><button class="sair" data-ir="inicio" aria-label="Pausar">✕</button><div class="pips">${pips}</div><span class="quiz-contador">${i + 1}/${PERGUNTAS.length}</span></div>
+      <p class="quiz-rotulo">Calibração</p>
+      <h2 class="pergunta">${esc(PERGUNTAS[i].p)}</h2>
+      <div class="opcoes">${S.quiz.ordem[i].map((f, k) =>
+        `<button class="opcao-card" data-resp="${i}|${f}"><i>${'ABC'[k]}</i><span>${esc(PERGUNTAS[i].r[f])}</span></button>`).join('')}</div>
+    </div>`;
 }
 
 function contagemQuiz(respostas) {
@@ -200,12 +367,57 @@ function vQuizFim(respostas) {
   const max = Math.max(...Object.values(c));
   const topo = Object.keys(c).filter(f => c[f] === max);
   if (topo.length === 1) {
-    return `<section class="cartao"><h2>Resultado</h2><p>Você é da <span class="chip ${topo[0]}">${NOME_FACCAO[topo[0]]}</span></p>
-      <p class="sub">Isso é definitivo e libera o XP guardado no Cofre.</p>
-      <button class="botao primario" data-faccao="${topo[0]}">Confirmar facção</button></section>`;
+    return `<div class="quiz-tela"><div class="quiz-centro">
+      <div class="scan">${SIGILO.iniciado}</div>
+      <h1>Calibração completa</h1>
+      <p class="regras">O Conclave já sabe quem você é.<br>Isso é definitivo e libera o XP do Cofre.</p>
+      <button class="botao primario" data-faccao="${topo[0]}">Revelar minha casa</button>
+    </div></div>`;
   }
-  return `<section class="cartao"><h2>Empate!</h2><p>Você ficou entre mais de uma facção. Escolha a que mais combina com você (definitivo):</p>
-    ${topo.map(f => `<button class="botao opcao" data-faccao="${f}"><span class="chip ${f}">${NOME_FACCAO[f]}</span></button>`).join('')}</section>`;
+  return `<div class="quiz-tela"><div class="quiz-centro">
+    <h1>Perfil híbrido</h1>
+    <p class="regras">Você ficou entre mais de uma casa. Escolha a que mais combina com você (definitivo).</p>
+    <div class="casas">${topo.map(f => `<button class="casa-card" data-faccao="${f}" data-faccao-tema="${f}" style="color:var(--${f})"><span>${SIGILO[f]}</span>
+      <span><strong style="font-size:1.1rem">${NOME_FACCAO[f]}</strong><br><small style="color:var(--texto-2)">${esc(TEXTO_CASA[f])}</small></span></button>`).join('')}</div>
+  </div></div>`;
+}
+
+/* ---------- primeiro acesso: perguntas rápidas ---------- */
+function camposCadastro(p = {}, pedirNome = false) {
+  return `
+    ${pedirNome ? `<label>Como devemos te chamar?<input name="nome" required maxlength="40" value="${esc(/^[+\d]/.test(p.nome_exibicao || '') ? '' : (p.nome_exibicao || ''))}" autocomplete="name"></label>` : ''}
+    <label>Data de nascimento<input type="date" name="nasc" required value="${esc(p.data_nascimento || '')}" max="${new Date().toISOString().slice(0, 10)}"></label>
+    <label>Há quanto tempo você joga?<input name="tempo" maxlength="120" placeholder="Ex.: desde criança, uns 5 anos…" value="${esc(p.tempo_jogando || '')}"></label>
+    <label>O que precisa ser interessante para você continuar jogando?<textarea name="motiva" rows="3" maxlength="300" placeholder="Pode ser curtinho!">${esc(p.motivacao_continuar || '')}</textarea></label>`;
+}
+async function salvarCadastro(form) {
+  const f = new FormData(form);
+  if (f.get('nome')) {
+    const r = await sb.from('perfis').update({ nome_exibicao: String(f.get('nome')).trim() }).eq('id', S.user.id);
+    if (r.error) throw r.error;
+  }
+  const { error } = await sb.rpc('salvar_cadastro_jogador', {
+    _data_nascimento: f.get('nasc'), _tempo_jogando: f.get('tempo'), _motivacao_continuar: f.get('motiva') });
+  if (error) throw error;
+  await recarregarPerfil();
+}
+function telaPrimeiroAcesso() {
+  document.body.classList.add('modo-quiz');
+  raiz.innerHTML = `<div class="quiz-tela"><div class="quiz-centro" style="text-align:left;margin:auto 0">
+    <p class="quiz-rotulo" style="margin-top:0">Primeiro acesso</p>
+    <h1>Conta pra gente</h1>
+    <p class="regras">Três perguntinhas rápidas para o Conclave te conhecer melhor.</p>
+    <form id="f-cadastro" class="cartao">${camposCadastro(S.perfil, true)}
+      <button class="botao primario" type="submit">Continuar</button></form>
+  </div></div>`;
+  $('#f-cadastro').addEventListener('submit', async e => {
+    e.preventDefault();
+    await comTrava(e.target.querySelector('button'), async () => {
+      await salvarCadastro(e.target);
+      document.body.classList.remove('modo-quiz');
+      raiz.innerHTML = ''; desenhar();
+    });
+  });
 }
 
 /* ---------- ações ---------- */
@@ -243,7 +455,7 @@ async function adicionar(item, detalhes = null) {
 }
 
 function montarPersonalizado(item) {
-  const extra = S.cfg.adicional_ac ?? 5000;
+  const extra = S.cfg.adicional_ac ?? 5;
   const m = abrirModal(`
     <h2>${esc(item.nome)}</h2>
     <p class="sub">Base ${fmtAC(item.preco_ac)} · cada adicional + ${fmtAC(extra)}</p>
@@ -256,7 +468,7 @@ function montarPersonalizado(item) {
   const form = m.querySelector('#f-pers');
   const atualizar = () => {
     const n = form.querySelectorAll('input[name=ad]:checked').length;
-    m.querySelector('#preco-pers').textContent = `Total: ${fmtAC(item.preco_ac + n * extra)} (${fmtReais(item.preco_ac + n * extra)})`;
+    m.querySelector('#preco-pers').textContent = `Total: ${fmtAC(item.preco_ac + n * extra)}`;
   };
   form.addEventListener('change', atualizar); atualizar();
   form.addEventListener('submit', e => {
@@ -269,22 +481,47 @@ function montarPersonalizado(item) {
 }
 
 async function responderQuiz(idx, faccao) {
+  await dorme(280);
   const { error } = await sb.from('respostas_quiz').insert({ usuario_id: S.user.id, pergunta_id: idx, resposta: faccao });
   if (error && error.code !== '23505') throw error;
   desenhar();
 }
 
 async function confirmarFaccao(f) {
+  const liberado = S.perfil.xp_bloqueado;
   const { error } = await sb.rpc('definir_faccao', { _faccao: f });
   if (error) throw error;
   await recarregarPerfil();
-  toast(`Bem-vindo à ${NOME_FACCAO[f]}! XP do Cofre liberado.`);
-  ir('inicio');
+  const o = document.createElement('div');
+  o.id = 'revelacao'; o.dataset.faccao = f;
+  o.innerHTML = `<div class="onda"></div><div class="conteudo">
+    <div class="selo">${SIGILO[f]}</div>
+    <p class="pre">O Sistema reconhece você</p>
+    <h1>${NOME_FACCAO[f]}</h1>
+    <p class="txt">${esc(TEXTO_CASA[f])}</p>
+    <p class="xp-lib">🔓 ${fmtNum(liberado)} XP liberados do Cofre</p>
+    <button class="botao primario" data-fechar-rev>Entrar no Conclave</button></div>`;
+  document.body.appendChild(o);
+}
+
+function fecharRevelacao() {
+  const o = $('#revelacao'); if (!o) return;
+  o.classList.add('saindo');
+  S.tela = 'inicio'; location.hash = 'inicio';
+  desenhar();                                   // o tema da casa troca por trás da revelação
+  setTimeout(() => o.remove(), 700);
 }
 
 /* ---------- eventos ---------- */
 raiz.addEventListener('click', e => {
   const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.pacote) return comTrava(t, () => escolherPacote(t.dataset.pacote));
+  if (t.dataset.acao === 'cancelar-pix') { pararEspera?.(); S.pedido = null; return desenhar(); }
+  if (t.id === 'copiar-pix') return comTrava(t, async () => {
+    try { await navigator.clipboard.writeText(S.pedido.pix_copia_cola); toast('Código PIX copiado. Cole no app do seu banco.'); }
+    catch { toast('Não deu para copiar. Selecione o código e copie.', 'erro'); }
+  });
+  if (t.dataset.quiz === 'comecar') { S.quiz.comecou = true; return desenhar(); }
   if (t.dataset.tela) return ir(t.dataset.tela);
   if (t.dataset.ir) return ir(t.dataset.ir);
   if (t.dataset.cat) { S.categoria = t.dataset.cat; return desenhar(); }
@@ -292,13 +529,15 @@ raiz.addEventListener('click', e => {
     const item = S.cardapio.find(i => i.id === t.dataset.add);
     return item.categoria === 'personalizado' ? montarPersonalizado(item) : comTrava(t, () => adicionar(item));
   }
-  if (t.dataset.resp) { const [i, f] = t.dataset.resp.split('|'); return comTrava(t, () => responderQuiz(Number(i), f)); }
+  if (t.dataset.resp) { const [i, f] = t.dataset.resp.split('|'); t.classList.add('marcado'); return comTrava(t, () => responderQuiz(Number(i), f)); }
   if (t.dataset.faccao) return comTrava(t, () => confirmarFaccao(t.dataset.faccao));
   if (t.dataset.rmCrianca) return comTrava(t, async () => {
     const { error } = await sb.from('criancas').delete().eq('id', t.dataset.rmCrianca); if (error) throw error; desenhar();
   });
   if (t.dataset.acao === 'sair') return sair();
 });
+
+document.addEventListener('click', e => { if (e.target.closest('[data-fechar-rev]')) fecharRevelacao(); });
 
 raiz.addEventListener('submit', async e => {
   e.preventDefault();
@@ -310,6 +549,9 @@ raiz.addEventListener('submit', async e => {
       if (error) throw error;
       await recarregarPerfil(); toast('Nome salvo.'); desenhar();
     });
+  }
+  if (e.target.id === 'f-cadastro-perfil') {
+    await comTrava(btn, async () => { await salvarCadastro(e.target); toast('Salvo.'); desenhar(); });
   }
   if (e.target.id === 'f-crianca') {
     await comTrava(btn, async () => {
@@ -327,7 +569,7 @@ function assinarTempoReal() {
     try {
       await carregarComanda(); await recarregarPerfil();
       if (['inicio', 'comanda'].includes(S.tela)) desenhar();   // só redesenha onde nada está sendo digitado
-      else if ($('#saldo')) { $('#saldo').textContent = fmtReais(S.perfil.saldo_ac); }
+      else if ($('#saldo')) { $('#saldo').textContent = fmtAC(S.perfil.saldo_ac); }
     } catch (e) { /* silencioso: tenta de novo na próxima mudança */ }
   };
   sb.channel('cliente')
@@ -343,7 +585,7 @@ async function iniciar() {
   if (!sessao) {
     return montarLogin(raiz, {
       titulo: 'O Conclave', subtitulo: 'Entre para pedir, jogar e subir de nível.',
-      permiteCadastro: true, aoEntrar: iniciar,
+      permiteCadastro: true, permiteWhatsApp: true, aoEntrar: iniciar,
     });
   }
   S.user = sessao.user;
@@ -356,6 +598,7 @@ async function iniciar() {
   }
   S.tela = location.hash.slice(1) || 'inicio';
   raiz.innerHTML = '';
+  if (!S.perfil.cadastro_completo_em) return telaPrimeiroAcesso();
   desenhar();
 }
 

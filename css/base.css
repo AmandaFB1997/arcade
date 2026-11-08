@@ -101,3 +101,8 @@ body[data-faccao="esquadrao"] .botao.primario { color: #0b0b14; }
 .preco { font-weight: 700; }
 .preco small { font-weight: 400; }
 [hidden] { display: none !important; }
+
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borda); vertical-align: top; }
+th { color: var(--texto-2); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .5px; }
+textarea { resize: vertical; }

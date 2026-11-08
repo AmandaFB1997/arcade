@@ -13,9 +13,9 @@ export function esc(v) {
   return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// 1.000 AC = R$ 1,00
+// 1 AC = R$ 1,00
 export const fmtNum = n => Number(n || 0).toLocaleString('pt-BR');
-export const fmtReais = ac => (Number(ac || 0) / 1000).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+export const fmtReais = ac => Number(ac || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 export const fmtAC = ac => `${fmtNum(ac)} AC`;
 export const fmtAcReais = ac => `${fmtAC(ac)} <small>(${fmtReais(ac)})</small>`;
 
