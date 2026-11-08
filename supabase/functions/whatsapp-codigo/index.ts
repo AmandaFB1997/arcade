@@ -1,16 +1,18 @@
-// "Send SMS Hook" do Supabase Auth: em vez de SMS, manda o código de 6 dígitos pelo WhatsApp.
+// "Send SMS Hook" do Supabase Auth: em vez de SMS, manda o código de 6 dígitos pelo WhatsApp,
+// usando o servidor afbtech-whatsapp (Railway) pela rota segura /servico/conclave/codigo.
 // Ligar em: Authentication → Auth Hooks → Send SMS hook → HTTPS → URL desta função. O Supabase gera o segredo (v1,whsec_...).
-// Segredos: SEND_SMS_HOOK_SECRET, WHATSAPP_API_URL, WHATSAPP_API_TOKEN.
-// ⚠️ AJUSTE a função enviarWhatsApp() ao formato da API do seu servidor de WhatsApp.
+// Segredos desta função: SEND_SMS_HOOK_SECRET e CONCLAVE_SEGREDO (o MESMO valor que está no Railway).
+// Opcional: AFB_WHATSAPP_URL (padrão abaixo).
 import { Webhook } from 'https://esm.sh/standardwebhooks@1.0.0';
 
 async function enviarWhatsApp(telefone: string, texto: string) {
-  const r = await fetch(Deno.env.get('WHATSAPP_API_URL')!, {
+  const base = (Deno.env.get('AFB_WHATSAPP_URL') ?? 'https://afbtech-whatsapp-production.up.railway.app').replace(/\/+$/, '');
+  const r = await fetch(`${base}/servico/conclave/codigo`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${Deno.env.get('WHATSAPP_API_TOKEN')}` },
-    body: JSON.stringify({ number: telefone.replace(/\D/g, ''), message: texto }),   // ← formato do SEU servidor
+    headers: { Authorization: `Bearer ${Deno.env.get('CONCLAVE_SEGREDO') ?? ''}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ telefone: telefone.replace(/\D/g, ''), texto }),
   });
-  if (!r.ok) throw new Error(`WhatsApp respondeu ${r.status}`);
+  if (!r.ok) throw new Error(`Servidor de WhatsApp respondeu ${r.status}: ${await r.text()}`);
 }
 
 Deno.serve(async (req) => {

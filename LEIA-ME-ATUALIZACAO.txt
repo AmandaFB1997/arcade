@@ -31,11 +31,18 @@ PARTE 2 — LIGAR O PIX (Mercado Pago)  [sem isso, a tela de pacotes avisa que o
 4) Teste: deixe um pacote barato (Admin > Pacotes, ex.: R$ 1,00 = 1 AC), pague pelo app e veja o saldo subir sozinho.
 
 PARTE 3 — LIGAR O LOGIN POR WHATSAPP  [sem isso, o botão "Receber código" dá erro; o e-mail continua funcionando]
-Precisa de uma API que envie mensagem de WhatsApp (o servidor de WhatsApp que você já usa na AFBTech serve).
-1) Abra supabase/functions/whatsapp-codigo/index.ts e ajuste a função enviarWhatsApp() ao formato da SUA API.
-2) Supabase > Edge Functions: crie a função "whatsapp-codigo" colando o código (pode deixar Verify JWT desligado).
-3) Edge Functions > Secrets: WHATSAPP_API_URL e WHATSAPP_API_TOKEN.
-4) Authentication > Sign In / Providers > Phone: ativar. (Se pedir provedor de SMS, escolha qualquer um: o hook abaixo substitui.)
-5) Authentication > Auth Hooks > Send SMS hook: ativar, tipo HTTPS, URL:
-   https://pcokxfpvrcpkekcfxptv.supabase.co/functions/v1/whatsapp-codigo
-   Gere o segredo (começa com v1,whsec_) e salve em Edge Functions > Secrets como SEND_SMS_HOOK_SECRET.
+Usa o servidor afbtech-whatsapp do Railway (o mesmo do sistema AFBTech). Foi preciso criar uma rota segura nele.
+A) NO SERVIDOR DO WHATSAPP (GitHub do afbtech-whatsapp + Railway)
+   1) Neste zip, a pasta servidor-whatsapp-afbtech tem o index.js ATUALIZADO (só ganhou a rota /servico/conclave/codigo).
+      No GitHub do afbtech-whatsapp: Add file > Upload files > envie esse index.js (substitui o atual) > commit. O Railway republica sozinho.
+   2) Railway > afbtech-whatsapp > Variables, criar:
+      CONCLAVE_SEGREDO   = uma senha longa e aleatória (invente; ex.: 40 letras e números). Guarde, vai usar de novo no passo B.
+      CONCLAVE_EMPRESA_ID = o ID (UUID) da empresa, dentro do sistema AFBTech, cujo WhatsApp vai enviar os códigos
+                            (precisa estar com o WhatsApp CONECTADO por QR code). Sugestão: cadastre "O Conclave" como empresa no sistema.
+B) NO SUPABASE DO CONCLAVE (projeto arcade)
+   3) Edge Functions > Deploy a new function > Via Editor: nome "whatsapp-codigo", colar supabase/functions/whatsapp-codigo/index.ts
+   4) Edge Functions > Secrets: CONCLAVE_SEGREDO = o MESMO valor do Railway.
+   5) Authentication > Sign In / Providers > Phone: ativar. (Se pedir provedor de SMS, escolha qualquer um: o hook abaixo substitui.)
+   6) Authentication > Auth Hooks > Send SMS hook: ativar, tipo HTTPS, URL:
+      https://pcokxfpvrcpkekcfxptv.supabase.co/functions/v1/whatsapp-codigo
+      Gere o segredo (começa com v1,whsec_) e salve em Edge Functions > Secrets como SEND_SMS_HOOK_SECRET.
