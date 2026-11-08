@@ -400,3 +400,29 @@ button.saldo { cursor: pointer; font-size: .9rem; }
 .item.aberto .item-desc { grid-template-rows: 1fr; }
 .item.aberto .item-desc > p { padding-top: 10px; margin-top: 10px; border-top: 1px dashed var(--borda); }
 .item.aberto { border-color: var(--destaque); }
+
+/* ===== Perfil novo, comanda e guerra ===== */
+.avatar.foto { overflow: hidden; padding: 0; } .avatar.foto img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+.avatar.grande { width: 84px; height: 84px; flex: none; }
+.perfil-heroi { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.foto-troca { position: relative; cursor: pointer; display: block; margin: 0; }
+.foto-troca .camera { position: absolute; right: -4px; bottom: -4px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: .85rem; background: var(--destaque); border: 2px solid var(--fundo); }
+.abas-perfil { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--cartao); border: 1px solid var(--borda); margin-bottom: 14px; }
+.abas-perfil button { padding: 10px 0; border: 0; border-radius: 10px; background: none; color: var(--texto-2); font: 600 .9rem var(--fonte-titulo); cursor: pointer; }
+.abas-perfil button.ativo { background: var(--destaque); color: var(--on-destaque); }
+.estatisticas.grade6 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+.estatisticas.grade6 > div { padding: 12px; border-radius: 14px; background: var(--cartao); border: 1px solid var(--borda); display: grid; gap: 2px; }
+.estatisticas.grade6 b { font: 700 1.35rem var(--mono); } .estatisticas.grade6 span { color: var(--texto-2); font-size: .78rem; }
+.conquistas { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+.conquista { display: grid; gap: 2px; padding: 10px; border-radius: 12px; border: 1px dashed var(--borda); opacity: .55; }
+.conquista.tem { opacity: 1; border: 1px solid var(--destaque); background: var(--brilho); }
+.conquista i { font-style: normal; font-size: 1.5rem; } .conquista small { color: var(--texto-2); font-size: .72rem; }
+.visita { display: grid; gap: 4px; margin-bottom: 8px; }
+.comanda-mesa { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; color: var(--texto); font: inherit; cursor: pointer; border-color: var(--destaque); margin-bottom: 12px; }
+.comanda-mesa > span { font-size: 1.8rem; } .comanda-mesa div { flex: 1; display: grid; } .comanda-mesa small { color: var(--texto-2); } .comanda-mesa em { color: var(--destaque); font-style: normal; }
+.grupo-pedido { margin-bottom: 12px; } .grupo-nome { margin: 0 0 8px; font-size: .95rem; } .grupo-nome b { opacity: .6; margin-left: 4px; }
+.xp-prev { display: flex; align-items: center; gap: 12px; margin-top: 12px; border-color: var(--destaque); } .xp-prev > span { font-size: 1.6rem; }
+.xp-prev div { display: grid; } .xp-prev b { font: 700 1.2rem var(--mono); color: var(--destaque); } .xp-prev small { color: var(--texto-2); }
+.aporte { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; } .aporte span { color: var(--texto-2); font-size: .8rem; } .aporte b { font: 700 1.1rem var(--mono); } .aporte em { font-style: normal; color: var(--destaque); font-size: .8rem; }
+.como-funciona { margin-top: 14px; } .como-funciona ol { margin: 8px 0 10px; padding-left: 18px; display: grid; gap: 8px; color: var(--texto-2); font-size: .9rem; line-height: 1.4; }
+.como-funciona li b { color: var(--texto); }

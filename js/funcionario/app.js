@@ -1,7 +1,7 @@
 // App do FUNCIONÁRIO — O Conclave (salão, cozinha e administração)
 import { sb, configurado, $, $$, esc, fmtNum, fmtReais, fmtAC, toast, abrirModal, fecharModal, avisoSemConfig,
          comTrava, erroAmigavel, tempoDecorrido, contem, partir, NOME_FACCAO } from '../nucleo.js';
-import { sessaoAtual, montarLogin, sair, validarSenha } from '../auth.js';
+import { sessaoAtual, montarLogin, sair, validarSenha, emRecuperacao, telaNovaSenha } from '../auth.js';
 import { entrada, ligarOnda, animarNumeros } from '../cliente/efeitos.js';
 
 const raiz = document.getElementById('app');
@@ -414,20 +414,29 @@ async function adminPesquisa() {
     <table><thead><tr><th>Jogador</th><th>Idade</th><th>Casa</th><th>Joga há</th><th>O que a faz continuar</th></tr></thead><tbody>${linhas}</tbody></table></div>`;
 }
 
+const ROTULO_PAPEL = { admin: 'Administrador', garcom: 'Garçom (salão)', cozinha: 'Cozinha, bar e jogos' };
 async function adminEquipe() {
   const papeis = ok(await sb.from('papeis_usuarios').select('*'));
   const ids = [...new Set(papeis.map(p => p.usuario_id))];
   const perfis = ids.length ? ok(await sb.from('perfis').select('id, nome_exibicao').in('id', ids)) : [];
   const nome = id => perfis.find(p => p.id === id)?.nome_exibicao || id.slice(0, 8);
   return `
-    <div class="cartao"><h2>Dar um papel</h2>
-      <p class="sub">A pessoa precisa já ter criado a conta (cliente ou Authentication do Supabase).</p>
+    <div class="cartao"><h2>Criar acesso da equipe</h2>
+      <p class="sub">Informe o e-mail, a senha inicial e o que a pessoa pode fazer. A conta já nasce pronta para entrar. Se ela esquecer a senha, usa "Esqueci minha senha" na tela de login e recebe o link no e-mail.</p>
+      <form id="f-acesso">
+        <label>Nome<input name="nome" maxlength="40" placeholder="Ex.: Lúcio" autocomplete="off"></label>
+        <label>E-mail<input name="email" type="email" required placeholder="nome@empresa.com" autocomplete="off"></label>
+        <label>Senha inicial<input name="senha" type="password" minlength="8" required autocomplete="new-password"></label>
+        <p class="sub dica-senha">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo. Peça para a pessoa trocar depois em "Senha".</p>
+        <label>Acesso<select name="papel">${Object.entries(ROTULO_PAPEL).map(([k, n]) => `<option value="${k}">${n}</option>`).join('')}</select></label>
+        <button class="botao primario" type="submit">Criar acesso</button></form></div>
+    <div class="cartao"><h2>Quem tem acesso</h2>
+      ${papeis.map(p => `<div class="linha" style="padding:6px 0"><span>${esc(nome(p.usuario_id))} <span class="chip">${esc(ROTULO_PAPEL[p.papel] || p.papel)}</span></span>
+        <button class="botao pequeno perigo" data-rm-papel="${p.usuario_id}|${p.papel}">Remover</button></div>`).join('') || '<p class="sub">Ninguém.</p>'}</div>
+    <div class="cartao"><h2>Dar acesso a quem já tem conta</h2>
       <form id="f-papel" class="linha" style="flex-wrap:wrap"><input name="email" type="email" placeholder="e-mail da pessoa" required style="flex:2;min-width:200px;margin:0">
-        <select name="papel" style="flex:1;min-width:120px;margin:0"><option>garcom</option><option>cozinha</option><option>admin</option></select>
-        <button class="botao" type="submit">Conceder</button></form></div>
-    <div class="cartao"><h2>Quem tem papel</h2>
-      ${papeis.map(p => `<div class="linha" style="padding:6px 0"><span>${esc(nome(p.usuario_id))} — <span class="chip">${p.papel}</span></span>
-        <button class="botao pequeno perigo" data-rm-papel="${p.usuario_id}|${p.papel}">Remover</button></div>`).join('') || '<p class="sub">Ninguém.</p>'}</div>`;
+        <select name="papel" style="flex:1;min-width:120px;margin:0"><option value="garcom">garçom</option><option value="cozinha">cozinha</option><option value="admin">admin</option></select>
+        <button class="botao" type="submit">Conceder</button></form></div>`;
 }
 
 /* ---------- eventos ---------- */
@@ -547,6 +556,21 @@ raiz.addEventListener('click', e => {
 
 raiz.addEventListener('submit', e => {
   e.preventDefault();
+  if (e.target.id === 'f-acesso') {
+    return comTrava(e.target.querySelector('button[type=submit]'), async () => {
+      const f = Object.fromEntries(new FormData(e.target));
+      const faltas = validarSenha(f.senha, f.email);
+      if (faltas.length) throw new Error('Senha fraca. Falta: ' + faltas.join('; ') + '.');
+      const { data, error } = await sb.functions.invoke('criar-funcionario', { body: { nome: f.nome, email: f.email, senha: f.senha, papel: f.papel } });
+      if (error) {
+        let msg = 'Não foi possível criar o acesso. A função "criar-funcionario" já foi publicada no Supabase?';
+        try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* mantém a mensagem */ }
+        throw new Error(msg);
+      }
+      if (data?.erro) throw new Error(data.erro);
+      toast(`${data.criado ? 'Acesso criado' : 'Acesso atualizado'}: ${f.email}. Já pode entrar.`); desenhar();
+    });
+  }
   if (e.target.id === 'f-papel') {
     const f = new FormData(e.target);
     comTrava(e.target.querySelector('button'), async () => {
@@ -612,6 +636,7 @@ function assinarTempoReal() {
 async function iniciar() {
   if (!configurado) return avisoSemConfig(raiz);
   const sessao = await sessaoAtual();
+  if (sessao && emRecuperacao()) return telaNovaSenha(raiz);
   if (!sessao) {
     return montarLogin(raiz, { titulo: 'O Conclave · Equipe', subtitulo: 'Entre com o seu login individual.', permiteCadastro: false, aoEntrar: iniciar });
   }

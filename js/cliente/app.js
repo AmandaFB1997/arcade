@@ -1,7 +1,7 @@
 // App do CLIENTE — O Conclave
 import { sb, configurado, $, $$, esc, fmtNum, fmtAC, fmtAcReais, toast, abrirModal, fecharModal,
          avisoSemConfig, comTrava, erroAmigavel, NOME_FACCAO } from '../nucleo.js';
-import { sessaoAtual, montarLogin, sair, validarSenha } from '../auth.js';
+import { sessaoAtual, montarLogin, sair, validarSenha, emRecuperacao, telaNovaSenha } from '../auth.js';
 import { PERGUNTAS } from '../dados/quiz.js';
 import { ADICIONAIS } from '../dados/adicionais.js';
 import { animarNumeros, animarAneis, entrada, ligarInclinacao, ligarOnda, feedback, voarParaComanda, vibrar } from './efeitos.js';
@@ -36,7 +36,7 @@ const CATEGORIAS = { comida: 'Comida', bebida: 'Bebidas', jogo: 'Jogos', experie
 
 const S = {
   user: null, perfil: null, niveis: [], cfg: {}, cardapio: [], comanda: null, itens: [],
-  criancas: [], cotas: [], pedido: null, jogos: [], mesa: null, tela: 'inicio', categoria: 'todos',
+  criancas: [], cotas: [], pedido: null, fotoUrl: null, perfilAba: 'resumo', jogos: [], mesa: null, tela: 'inicio', categoria: 'todos',
   quiz: { ordem: {}, empate: null, comecou: false },
 };
 let iniciado = false;
@@ -58,6 +58,7 @@ async function carregar() {
     .then(r => r.error ? [] : r.data, () => []);
   await carregarComanda();
   await carregarJogos(); await carregarMesa();
+  await carregarFoto();
 }
 
 async function recarregarPerfil() {
@@ -134,7 +135,7 @@ function tileJogo(i, n = 0) {
       <div class="tile-brilho"></div>
       <div class="tile-icone">${ICONE_CAT[i.categoria] || '🎲'}</div>
       <h3>${esc(i.nome)}</h3>
-      ${i.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span>` : ''}
+      ${i.faccao && S.perfil?.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span>` : ''}
       <div class="tile-rodape"><span class="preco">${fmtAC(i.preco_ac)}</span>
         <button class="botao pequeno primario" data-add="${i.id}">Jogar</button></div>
     </article>`;
@@ -147,7 +148,7 @@ function cartaoItem(i, compacto = false) {
       <div class="item-icone">${ICONE_CAT[i.categoria] || '🍽️'}</div>
       <div class="item-corpo">
         <h3>${esc(i.nome)}</h3>
-        ${i.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span> ` : ''}
+        ${i.faccao && S.perfil?.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span> ` : ''}
         <div class="preco">${fmtAC(i.preco_ac)}${pers ? ' <small>+ adicionais</small>' : ''}</div>
         ${i.descricao ? '<small class="ver-mais">o que tem ▾</small>' : ''}
       </div>
@@ -172,7 +173,7 @@ async function vInicio() {
       <div class="heroi-topo">
         <div class="anel-avatar">
           <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" class="anel-base"/><circle cx="50" cy="50" r="46" class="anel-prog" data-anel="${p.faccao ? pct : 0}"/></svg>
-          <div class="avatar ${p.faccao ? '' : 'iniciado'}">${SIGILO[p.faccao || 'iniciado']}</div>
+          ${avatarHtml(p)}
         </div>
         <div>
           <div class="titulo-rank">${rank}</div>
@@ -263,28 +264,37 @@ function vComanda() {
   if (!S.comanda) return '<p class="vazio">Sem comanda aberta.<br><button class="botao" data-ir="cardapio" style="margin-top:12px">Ir ao cardápio</button></p>';
   const total = totalComanda();
   const depois = S.perfil.saldo_ac - total;
+  const taxa = S.cfg.xp_por_ac ?? 1, xpPrev = Math.floor(total * taxa);
+  const grupos = [['pendente', '🕐 Na fila'], ['preparando', '👨‍🍳 Sendo preparados'], ['pronto', '🔔 Prontos, a caminho'], ['entregue', '✅ Entregues']];
+  const feitos = S.itens.filter(i => i.status === 'entregue').length;
+  const pctEntrega = S.itens.length ? Math.round((feitos / S.itens.length) * 100) : 0;
+  const linha = i => `
+    <div class="pedido ${i.status}">
+      <div class="linha"><div><strong>${i.quantidade}× ${esc(i.cardapio?.nome || 'Item')}</strong>
+        ${i.detalhes_personalizados?.adicionais?.length ? `<br><small>+ ${esc(i.detalhes_personalizados.adicionais.join(', '))}</small>` : ''}
+        ${i.detalhes_personalizados?.observacao ? `<br><small>Obs: ${esc(i.detalhes_personalizados.observacao)}</small>` : ''}</div>
+        <span class="preco">${fmtAC(i.preco_ac * i.quantidade)}</span></div>
+      <div class="etapas">${ETAPAS.map((e, n) => `<i class="${n <= Math.max(0, ETAPAS.indexOf(i.status)) ? 'feita' : ''}"></i>`).join('')}</div>
+    </div>`;
   return `
-    <section class="cartao">
-      <div class="linha"><h2>Mesa ${esc(S.comanda.mesa)}</h2><span class="preco total">${fmtAC(total)}</span></div>
-      ${S.itens.length ? S.itens.map(i => {
-        const etapa = Math.max(0, ETAPAS.indexOf(i.status));
-        return `
-        <div class="pedido">
-          <div class="linha">
-            <div><strong>${i.quantidade}× ${esc(i.cardapio?.nome || 'Item')}</strong>
-              ${i.detalhes_personalizados?.adicionais?.length ? `<br><small>+ ${esc(i.detalhes_personalizados.adicionais.join(', '))}</small>` : ''}</div>
-            <span class="preco">${fmtAC(i.preco_ac * i.quantidade)}</span>
-          </div>
-          <div class="etapas">${ETAPAS.map((e, n) => `<i class="${n <= etapa ? 'feita' : ''}"></i>`).join('')}</div>
-          <span class="chip ${i.status}">${ROTULO_STATUS[i.status] || i.status}</span>
-        </div>`; }).join('') : '<p class="sub">Ainda sem itens. Peça algo no cardápio.</p>'}
+    <section class="cartao comanda-topo">
+      <div class="linha"><div><small class="titulo-rank">Sua comanda</small><h2 style="margin:2px 0 0">Mesa ${esc(S.comanda.mesa)}</h2></div>
+        <span class="preco total">${fmtAC(total)}</span></div>
+      ${S.itens.length ? `<div class="barra" style="margin:12px 0 4px"><i style="width:${pctEntrega}%"></i></div>
+        <small class="sub">${feitos} de ${S.itens.length} ${S.itens.length === 1 ? 'item entregue' : 'itens entregues'}</small>` : ''}
     </section>
+    ${S.mesa ? `<button class="cartao comanda-mesa" data-ir="mesa"><span>🎲</span><div><b>${esc(nomeDoJogo(S.mesa))}</b><small>${esc(ROTULO_MESA[S.mesa.status])}${S.mesa.mesa_jogo ? ` · ${esc(S.mesa.mesa_jogo)}` : ''}</small></div><em>Abrir ›</em></button>` : ''}
+    ${S.itens.length ? grupos.map(([st, nome]) => {
+      const l = S.itens.filter(i => i.status === st); if (!l.length) return '';
+      return `<section class="cartao grupo-pedido"><h3 class="grupo-nome">${nome} <b>${l.length}</b></h3>${l.map(linha).join('')}</section>`;
+    }).join('') : '<section class="cartao"><p class="sub" style="margin:0">Ainda sem itens. <button class="botao pequeno" data-ir="cardapio">Pedir algo</button></p></section>'}
     <section class="cartao resumo">
       <div class="linha"><span>Saldo atual</span><span class="preco">${fmtAC(S.perfil.saldo_ac)}</span></div>
       <div class="linha"><span>Esta comanda</span><span class="preco">− ${fmtAC(total)}</span></div>
       <div class="linha forte"><span>Saldo depois</span><span class="preco ${depois < 0 ? 'negativo' : ''}">${fmtAC(depois)}</span></div>
       ${depois < 0 ? '<small>O que passar do saldo é cobrado em reais no fechamento. <a href="#carteira">Carregar moedas</a></small>' : ''}
     </section>
+    ${xpPrev > 0 ? `<section class="cartao xp-prev"><span>✨</span><div><b>+${fmtNum(xpPrev)} XP</b><small>${S.perfil.faccao ? 'você ganha quando a conta for fechada' : 'vão para o seu Cofre até você escolher a casa'}</small></div></section>` : ''}
     <p class="sub">A conta é fechada na mesa pelo garçom.</p>`;
 }
 
@@ -299,60 +309,119 @@ async function vGuerra() {
   const dif = minha && lider && lider.faccao !== minha
     ? Number(lider.pontos) - Number(ordenado[pos - 1]?.pontos || 0) : 0;
   const medalha = ['🥇', '🥈', '🥉'];
+  const taxa = S.cfg.xp_por_ac ?? 1;
+  const minhaLinha = minha && placar.find(l => l.faccao === minha);
+  const aporte = minhaLinha && Number(minhaLinha.pontos) > 0 ? Math.round((S.perfil.xp / Number(minhaLinha.pontos)) * 100) : 0;
   return `
     <h2>Guerra do Domínio</h2>
-    <p class="sub">Cada XP ganho pelos membros soma pontos para a casa.</p>
+    <p class="sub">As três casas disputam quem junta mais pontos. Quem pede, joga e volta faz a sua casa subir.</p>
     ${minha ? `<section class="cartao destaque-guerra ${minha}">
       <strong>${pos === 1 ? 'Sua casa está na frente!' : `Sua casa está em ${pos}º lugar`}</strong>
-      <small>${pos === 1 ? 'Peça, jogue e mantenha a liderança.' : `Faltam ${fmtNum(dif)} pontos para alcançar a líder. Cada pedido conta.`}</small>
-    </section>` : '<section class="cartao aviso"><small>Faça o Teste de Calibração para escolher uma casa e entrar na guerra.</small></section>'}
+      <small>${pos === 1 ? 'Peça, jogue e mantenha a liderança.' : `Faltam ${fmtNum(dif)} pontos para alcançar a ${pos === 2 ? 'líder' : 'casa à frente'}. Cada pedido conta.`}</small>
+      <div class="aporte"><span>Sua contribuição</span><b>${fmtNum(S.perfil.xp)} XP</b>${aporte ? `<em>${aporte}% da casa</em>` : ''}</div>
+    </section>` : '<section class="cartao aviso"><small>Faça o Teste de Calibração para escolher uma casa e entrar na guerra. Até lá, o XP que você ganha fica guardado no Cofre.</small></section>'}
     ${ordenado.map((l, n) => `
       <div class="cartao guerra-linha ${l.faccao} ${minha === l.faccao ? 'minha' : ''}">
         <div class="linha"><strong>${medalha[n] || ''} ${NOME_FACCAO[l.faccao]}${minha === l.faccao ? ' (a sua)' : ''}</strong>
           <span class="preco">${fmtNum(l.pontos)} <small>${Math.round((Number(l.pontos) / total) * 100)}%</small></span></div>
         <div class="barra"><i style="width:${(Number(l.pontos) / max) * 100}%"></i></div>
         <small class="sub">${esc(TEXTO_CASA[l.faccao] || '')}</small>
-      </div>`).join('')}`;
+      </div>`).join('')}
+    <section class="cartao como-funciona">
+      <h3>Como funciona</h3>
+      <ol>
+        <li><b>Gaste e ganhe XP.</b> Cada 1 AC gasto na comanda rende ${fmtNum(taxa)} XP quando a conta é fechada.</li>
+        <li><b>O XP vira ponto da sua casa.</b> Tudo o que você ganha soma no placar da casa que você escolheu no teste.</li>
+        <li><b>Antes do teste, nada é perdido.</b> O XP fica trancado no Cofre. Ao escolher a casa, ele é liberado e já entra no placar.</li>
+        <li><b>A casa não muda.</b> A escolha é definitiva, então escolha a que combina com o seu jeito de jogar.</li>
+        <li><b>Traga gente.</b> Na Hora de Mesa, quem monta equipe maior ganha XP extra, e esse XP também vale para a casa.</li>
+      </ol>
+      <small class="sub">As regras e valores ainda podem mudar conforme os sócios decidirem.</small>
+    </section>`;
+}
+
+const CONQUISTAS = [
+  ['🍽️', 'Primeira vez', 'Fez o primeiro pedido', d => d.pedidos >= 1],
+  ['🔥', 'Frequentador', '5 visitas ao Conclave', d => d.visitas >= 5],
+  ['🎲', 'Mesa montada', 'Jogou uma Hora de Mesa', d => d.partidas >= 1],
+  ['🛡️', 'Em uma casa', 'Escolheu a sua casa', d => !!S.perfil.faccao],
+  ['⭐', 'Nível 5', 'Chegou ao nível 5', d => S.perfil.nivel >= 5],
+  ['💰', 'Mão aberta', 'Gastou 500 AC no total', d => d.gasto >= 500],
+];
+const FOTO_PADRAO = null;
+async function carregarFoto() {
+  const r = await sb.storage.from('avatares').createSignedUrl(`${S.user.id}/avatar.jpg`, 3600).catch(() => null);
+  S.fotoUrl = r?.data?.signedUrl || null;
+}
+const avatarHtml = (p, extra = '') => S.fotoUrl
+  ? `<div class="avatar foto ${extra}"><img src="${S.fotoUrl}" alt="Sua foto"></div>`
+  : `<div class="avatar ${p.faccao ? '' : 'iniciado'} ${extra}">${SIGILO[p.faccao || 'iniciado']}</div>`;
+
+async function reduzirFoto(arquivo) {
+  const img = await new Promise((ok2, ruim) => { const i = new Image(); i.onload = () => ok2(i); i.onerror = ruim; i.src = URL.createObjectURL(arquivo); });
+  const lado = Math.min(img.width, img.height), T = 320;
+  const c = document.createElement('canvas'); c.width = c.height = T;
+  c.getContext('2d').drawImage(img, (img.width - lado) / 2, (img.height - lado) / 2, lado, lado, 0, 0, T, T);
+  URL.revokeObjectURL(img.src);
+  return new Promise(res => c.toBlob(res, 'image/jpeg', 0.85));
+}
+
+async function dadosPerfil() {
+  const uid = S.user.id;
+  const [cm, ms] = await Promise.all([
+    sb.from('comandas').select('id, mesa, total_ac, aberta_em, fechada_em, itens_comanda(quantidade, cardapio(nome))').eq('usuario_id', uid).eq('status', 'fechada')
+      .order('fechada_em', { ascending: false }).limit(30).then(r => r.error ? [] : r.data, () => []),
+    sb.from('sessoes_mesa').select('iniciada_em, encerrada_em').eq('usuario_id', uid).eq('status', 'encerrada').then(r => r.error ? [] : r.data, () => []),
+  ]);
+  const gasto = cm.reduce((t, c) => t + Number(c.total_ac || 0), 0) + (S.comanda ? totalComanda() : 0);
+  const minutos = ms.reduce((t, m) => t + (m.iniciada_em && m.encerrada_em ? (new Date(m.encerrada_em) - new Date(m.iniciada_em)) / 60000 : 0), 0);
+  const pedidos = cm.reduce((t, c) => t + (c.itens_comanda || []).reduce((s, i) => s + i.quantidade, 0), 0) + S.itens.length;
+  return { cm, gasto, pedidos, visitas: cm.length + (S.comanda ? 1 : 0), partidas: ms.length, minutos: Math.round(minutos) };
 }
 
 async function vPerfil() {
   S.criancas = ok(await sb.from('criancas').select('*').eq('responsavel_id', S.user.id).order('criado_em'));
-  const p = S.perfil;
+  const p = S.perfil, aba = S.perfilAba || 'resumo';
   const { prox, pct, falta } = progressoNivel();
-  return `
-    <section class="cartao heroi">
-      <div class="avatar ${p.faccao ? '' : 'iniciado'}">${SIGILO[p.faccao || 'iniciado']}</div>
-      <div style="flex:1">
+  const d = await dadosPerfil();
+  const hm = m => m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`;
+  const topo = `
+    <section class="cartao perfil-heroi">
+      <label class="foto-troca" title="Trocar foto">${avatarHtml(p, 'grande')}<span class="camera">📷</span>
+        <input type="file" id="foto-arq" accept="image/*" hidden></label>
+      <div style="flex:1;min-width:0">
         <div class="titulo-rank">${p.faccao ? NOME_FACCAO[p.faccao] : 'Iniciado'}</div>
         <h2>${esc(p.nome_exibicao)}</h2>
         ${p.faccao ? `<div class="barra" style="margin:8px 0 4px"><i style="width:${pct}%"></i></div>
-          <small>${prox ? `Nível ${p.nivel} · faltam ${fmtNum(falta)} XP` : `Nível ${p.nivel} · máximo`}</small>` : '<small>Faça o teste para escolher a sua casa.</small>'}
+          <small>${prox ? `Nível ${p.nivel} · faltam ${fmtNum(falta)} XP para o ${prox.nivel}` : `Nível ${p.nivel} · máximo`}</small>`
+          : '<small>Faça o teste para escolher a sua casa.</small>'}
       </div>
     </section>
-    <div class="estatisticas">
-      <div><b>${p.faccao ? p.nivel : 0}</b><span>Nível</span></div>
-      <div><b>${fmtNum(p.faccao ? p.xp : p.xp_bloqueado)}</b><span>${p.faccao ? 'XP' : 'XP trancados'}</span></div>
-      <div><b>${fmtNum(p.saldo_ac)}</b><span>Moedas AC</span></div>
-    </div>
-    <section class="cartao">
-      <h2>Meu perfil</h2>
+    <div class="abas-perfil">${[['resumo', 'Resumo'], ['historico', 'Histórico'], ['conta', 'Conta']].map(([id, n]) =>
+      `<button class="${aba === id ? 'ativo' : ''}" data-paba="${id}">${n}</button>`).join('')}</div>`;
+  if (aba === 'historico') return topo + `
+    ${d.cm.length ? d.cm.map(c => `
+      <section class="cartao visita">
+        <div class="linha"><div><b>${c.fechada_em ? new Date(c.fechada_em).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }) : ''}</b>
+          <small> · Mesa ${esc(c.mesa)}</small></div><span class="preco">${fmtAC(c.total_ac)}</span></div>
+        <small class="sub">${(c.itens_comanda || []).map(i => `${i.quantidade}× ${esc(i.cardapio?.nome || 'Item')}`).join(', ') || 'Sem itens'}</small>
+      </section>`).join('') : '<section class="cartao"><p class="sub" style="margin:0">Suas visitas aparecem aqui depois que a primeira conta for fechada.</p></section>'}`;
+  if (aba === 'conta') return topo + `
+    <section class="cartao"><h2>Foto e nome</h2>
+      <p class="sub">Toque na sua foto lá em cima para trocar. Ela é só sua e da equipe.</p>
       <form id="f-nome"><label>Nome<input name="nome" value="${esc(p.nome_exibicao)}" required maxlength="40"></label>
         <button class="botao" type="submit">Salvar nome</button></form>
     </section>
-    <section class="cartao">
-      <h2>Senha</h2>
-      <p class="sub">${location.hash === '#perfil' ? 'Crie ou troque a sua senha de e-mail.' : ''}</p>
+    <section class="cartao"><h2>Senha</h2>
       <form id="f-senha"><label>Nova senha<input name="senha" type="password" minlength="8" autocomplete="new-password" required></label>
         <p class="sub dica-senha">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo (* ! @ #). Sem sequências como 123 ou abc.</p>
         <button class="botao" type="submit">Salvar senha</button></form>
     </section>
-    <section class="cartao">
-      <h2>Sobre você</h2>
+    <section class="cartao"><h2>Sobre você</h2>
       <form id="f-cadastro-perfil">${camposCadastro(p)}<button class="botao" type="submit">Salvar</button></form>
     </section>
-    <section class="cartao">
-      <h2>Crianças</h2>
-      <p class="sub">Para o Kids. Sem CPF, sem e-mail, sem XP — só o nome.</p>
+    <section class="cartao"><h2>Crianças</h2>
+      <p class="sub">Para o Kids. Sem CPF, sem e-mail, sem XP, só o nome.</p>
       ${S.criancas.map(c => `<div class="linha" style="padding:6px 0"><span>🧒 ${esc(c.nome)}</span>
         <button class="botao pequeno perigo" data-rm-crianca="${c.id}">Remover</button></div>`).join('')}
       <form id="f-crianca" class="linha" style="margin-top:8px">
@@ -360,6 +429,21 @@ async function vPerfil() {
         <button class="botao" type="submit">Adicionar</button></form>
     </section>
     <button class="botao perigo" data-acao="sair" style="width:100%">Sair da conta</button>`;
+  return topo + `
+    <div class="estatisticas grade6">
+      <div><b>${p.faccao ? p.nivel : 0}</b><span>Nível</span></div>
+      <div><b>${fmtNum(p.faccao ? p.xp : p.xp_bloqueado)}</b><span>${p.faccao ? 'XP' : 'XP no Cofre'}</span></div>
+      <div><b>${fmtNum(p.saldo_ac)}</b><span>Saldo AC</span></div>
+      <div><b>${fmtNum(d.gasto)}</b><span>Gasto total AC</span></div>
+      <div><b>${fmtNum(d.visitas)}</b><span>Visitas</span></div>
+      <div><b>${fmtNum(d.pedidos)}</b><span>Itens pedidos</span></div>
+      <div><b>${fmtNum(d.partidas)}</b><span>Partidas</span></div>
+      <div><b>${hm(d.minutos)}</b><span>Tempo de mesa</span></div>
+    </div>
+    <section class="cartao"><h3>Conquistas</h3>
+      <div class="conquistas">${CONQUISTAS.map(([ic, nome, desc, ok2]) => { const tem = ok2(d);
+        return `<div class="conquista ${tem ? 'tem' : ''}" title="${esc(desc)}"><i>${tem ? ic : '🔒'}</i><b>${esc(nome)}</b><small>${esc(desc)}</small></div>`; }).join('')}</div>
+    </section>`;
 }
 
 /* ---------- carteira: carregar moedas por PIX ---------- */
@@ -934,6 +1018,7 @@ raiz.addEventListener('click', e => {
   if (t.dataset.pt) { const [i, d] = t.dataset.pt.split('|').map(Number); placar[i].pontos = Math.max(-9999, Math.min(9999, placar[i].pontos + d)); agendarSalvar(); return desenhar(); }
   if (t.dataset.rmJog) { placar.splice(Number(t.dataset.rmJog), 1); agendarSalvar(); return desenhar(); }
   if (t.dataset.quiz === 'comecar') { S.quiz.comecou = true; return desenhar(); }
+  if (t.dataset.paba) { S.perfilAba = t.dataset.paba; return desenhar(); }
   if (t.dataset.tela) { if (t.dataset.tela === 'cardapio') S.categoria = 'todos'; return ir(t.dataset.tela); }
   if (t.dataset.cat && t.dataset.ir) { S.categoria = t.dataset.cat; return ir(t.dataset.ir); }
   if (t.dataset.ir) { if (t.dataset.ir === 'cardapio') S.categoria = 'todos'; return ir(t.dataset.ir); }
@@ -1002,6 +1087,16 @@ raiz.addEventListener('submit', async e => {
   }
 });
 
+document.addEventListener('change', async e => {
+  if (e.target.id !== 'foto-arq' || !e.target.files?.[0]) return;
+  try {
+    const blob = await reduzirFoto(e.target.files[0]);
+    const { error } = await sb.storage.from('avatares').upload(`${S.user.id}/avatar.jpg`, blob, { contentType: 'image/jpeg', upsert: true });
+    if (error) throw error;
+    await carregarFoto(); feedback({ icone: '📸', titulo: 'Foto atualizada!', ms: 1500 }); desenhar();
+  } catch { toast('Não foi possível enviar a foto. Tente outra imagem.', 'erro'); }
+});
+
 /* ---------- tempo real ---------- */
 function assinarTempoReal() {
   const AVISO = { preparando: ['👨‍🍳', 'Estamos preparando!'], pronto: ['🔔', 'Seu pedido está pronto!'], entregue: ['✅', 'Pedido entregue. Bom proveito!'] };
@@ -1041,6 +1136,7 @@ function assinarTempoReal() {
 async function iniciar() {
   if (!configurado) return avisoSemConfig(raiz);
   const sessao = await sessaoAtual();
+  if (sessao && emRecuperacao()) return telaNovaSenha(raiz);
   if (!sessao) {
     return montarLogin(raiz, {
       titulo: 'O Conclave', subtitulo: 'Entre para pedir, jogar e subir de nível.',

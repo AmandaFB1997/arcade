@@ -1,5 +1,54 @@
 // Login individual (e-mail + senha) pelo Supabase Auth
-import { sb, esc, erroAmigavel, toast, comTrava } from './nucleo.js';
+import { sb, esc, erroAmigavel, toast, comTrava, abrirModal, fecharModal } from './nucleo.js';
+
+// ---------- Recuperação de senha (o link do e-mail volta para esta página) ----------
+let recuperando = /type=recovery/.test(location.hash);
+try { sb?.auth.onAuthStateChange(ev => { if (ev === 'PASSWORD_RECOVERY') recuperando = true; }); } catch { /* sem banco configurado */ }
+export const emRecuperacao = () => recuperando;
+
+export function telaNovaSenha(raiz) {
+  raiz.innerHTML = `
+    <div class="login">
+      <div class="logo-grande"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M12 8l4 2.3v4.4L12 17l-4-2.3v-4.4z"/></svg></div>
+      <h1>Criar nova senha</h1>
+      <p class="sub">Escolha uma senha nova para a sua conta.</p>
+      <form id="form-nova" class="cartao">
+        <label>Nova senha<input name="senha" type="password" required minlength="8" autocomplete="new-password"></label>
+        <p class="sub dica-senha">Mínimo 8 caracteres, com maiúscula, minúscula, número e símbolo (* ! @ #). Sem sequências como 123 ou abc.</p>
+        <button class="botao primario" type="submit">Salvar e entrar</button>
+      </form>
+    </div>`;
+  raiz.querySelector('#form-nova').addEventListener('submit', ev => {
+    ev.preventDefault();
+    comTrava(ev.target.querySelector('button[type=submit]'), async () => {
+      const { data: { user } } = await sb.auth.getUser();
+      const senha = new FormData(ev.target).get('senha');
+      const faltas = validarSenha(senha, user?.email || '');
+      if (faltas.length) throw new Error('Senha fraca. Falta: ' + faltas.join('; ') + '.');
+      const { error } = await sb.auth.updateUser({ password: senha });
+      if (error) throw error;
+      toast('Senha salva!'); recuperando = false;
+      setTimeout(() => location.replace(location.pathname), 700);
+    });
+  });
+}
+
+function pedirRecuperacao(emailInicial = '') {
+  const m = abrirModal(`<h2>Esqueci minha senha</h2>
+    <p class="sub">Digite o seu e-mail e enviamos um link para você criar uma senha nova.</p>
+    <form id="f-esqueci"><label>E-mail<input name="email" type="email" required value="${esc(emailInicial)}" autocomplete="email"></label>
+      <button class="botao primario" type="submit">Enviar o link</button>
+      <button class="botao" type="button" data-fechar style="width:100%;margin-top:8px">Cancelar</button></form>`);
+  m.querySelector('#f-esqueci').addEventListener('submit', ev => {
+    ev.preventDefault();
+    comTrava(ev.target.querySelector('button[type=submit]'), async () => {
+      const email = new FormData(ev.target).get('email').trim();
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if (error) throw error;
+      fecharModal(); toast('Se esse e-mail tiver conta, o link já foi enviado. Veja também o spam.');
+    });
+  });
+}
 
 
 // ---------- Regras de senha e limite de tentativas ----------
@@ -149,10 +198,12 @@ function montarLoginEmail(raiz, opcoes, voltarParaWhatsApp) {
             ? `<button class="botao link" type="button" id="alternar">${cad ? 'Já tenho conta' : 'Primeiro acesso? Criar conta'}</button>`
             : '<p class="sub">Acesso só para equipe. Peça seu cadastro ao administrador.</p>'}
         </form>
+        ${cad ? '' : '<p style="text-align:center;margin:10px 0 0"><button class="botao link" type="button" id="esqueci">Esqueci minha senha</button></p>'}
         ${voltarParaWhatsApp ? '<p style="text-align:center;margin:10px 0 0"><button class="botao link" type="button" id="usar-wpp">Entrar com WhatsApp</button></p>' : ''}
         ${extraLinks()}
       </div>`;
     raiz.querySelector('#usar-wpp')?.addEventListener('click', voltarParaWhatsApp);
+    raiz.querySelector('#esqueci')?.addEventListener('click', () => pedirRecuperacao(raiz.querySelector('[name=email]')?.value || ''));
     raiz.querySelector('#alternar')?.addEventListener('click', () => { modo = cad ? 'entrar' : 'cadastrar'; desenhar(); });
     raiz.querySelector('#form-login').addEventListener('submit', async ev => {
       ev.preventDefault();

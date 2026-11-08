@@ -15,6 +15,13 @@ O QUE TEM DE NOVO
   Equipe: aba Jogos tem "Mesas de jogo" (Separar o jogo > Mesa pronta com o nome da mesa > Cliente sentou).
   Admin > Jogos (catálogo) e Admin > Partidas (placar, nota, comentário, áudio). Bônus ajustável em Admin > Regras (xp_equipe_*).
   Rode o sql/atualizar_tudo.sql (apague o que estiver no editor antes de colar).
+- NOVO: perfil com foto, abas Resumo/Histórico/Conta, gasto total, conquistas; comanda e Guerra melhoradas;
+  antes do teste o cliente não vê facção em lugar nenhum.
+- NOVO: Admin > Equipe cria o acesso (e-mail + senha + papel) e "Esqueci minha senha" na tela de login.
+  PARA FUNCIONAR: Supabase > Edge Functions > Deploy a new function > "Via Editor", nome criar-funcionario,
+  colar supabase/functions/criar-funcionario/index.ts (pode deixar Verify JWT ligado).
+  E em Authentication > URL Configuration: Site URL = https://arcade.afbtechonline.com.br (ou o link do GitHub Pages)
+  e em Redirect URLs adicionar .../cliente/ e .../funcionario/ (com /* no fim).
 
 PARTE 1 — COLOCAR O SITE NO AR (obrigatório, 5 minutos)
 1) SQL Editor do projeto arcade: abra o arquivo sql/atualizar_tudo.sql, copie TUDO, cole e clique em Run. (Uma vez só; se rodar de novo, não dá erro.)
