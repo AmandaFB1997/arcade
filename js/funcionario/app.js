@@ -561,9 +561,9 @@ raiz.addEventListener('submit', e => {
       const f = Object.fromEntries(new FormData(e.target));
       const faltas = validarSenha(f.senha, f.email);
       if (faltas.length) throw new Error('Senha fraca. Falta: ' + faltas.join('; ') + '.');
-      const { data, error } = await sb.functions.invoke('criar-funcionario', { body: { nome: f.nome, email: f.email, senha: f.senha, papel: f.papel } });
+      const { data, error } = await sb.functions.invoke('super-function', { body: { nome: f.nome, email: f.email, senha: f.senha, papel: f.papel } });
       if (error) {
-        let msg = 'Não foi possível criar o acesso. A função "criar-funcionario" já foi publicada no Supabase?';
+        let msg = 'Não foi possível criar o acesso. A função (super-function) já foi publicada no Supabase?';
         try { const j = await error.context?.json?.(); if (j?.erro) msg = j.erro; } catch { /* mantém a mensagem */ }
         throw new Error(msg);
       }
