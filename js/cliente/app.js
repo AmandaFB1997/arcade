@@ -4,6 +4,7 @@ import { sb, configurado, $, $$, esc, fmtNum, fmtAC, fmtAcReais, toast, abrirMod
 import { sessaoAtual, montarLogin, sair, validarSenha } from '../auth.js';
 import { PERGUNTAS } from '../dados/quiz.js';
 import { ADICIONAIS } from '../dados/adicionais.js';
+import { animarNumeros, animarAneis, entrada, ligarInclinacao, ligarOnda, feedback, voarParaComanda, vibrar } from './efeitos.js';
 
 const raiz = document.getElementById('app');
 const svg = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -31,7 +32,7 @@ const TELAS = [
   ['inicio', 'Início'], ['cardapio', 'Cardápio'], ['comanda', 'Comanda'], ['guerra', 'Guerra'], ['perfil', 'Perfil'],
 ];
 const dorme = ms => new Promise(r => setTimeout(r, ms));
-const CATEGORIAS = { comida: 'Comida', bebida: 'Bebidas', jogo: 'Jogos', kids: 'Kids', personalizado: 'Monte o seu' };
+const CATEGORIAS = { comida: 'Comida', bebida: 'Bebidas', jogo: 'Jogos', experiencia: 'Experiências', kids: 'Kids', personalizado: 'Monte o seu' };
 
 const S = {
   user: null, perfil: null, niveis: [], cfg: {}, cardapio: [], comanda: null, itens: [],
@@ -88,7 +89,7 @@ function desenhar() {
   cnt.hidden = S.itens.length === 0; cnt.textContent = S.itens.length;
   const vistas = { carteira: vCarteira, covil: vCovil, inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz };
   const tela = vistas[S.tela] || vInicio;
-  Promise.resolve(tela()).then(html => { if ($('#main')) { $('#main').innerHTML = html; } })
+  Promise.resolve(tela()).then(html => { const m = $('#main'); if (m) { m.innerHTML = html; entrada(m); animarNumeros(m); animarAneis(m); } })
     .catch(e => { $('#main').innerHTML = `<div class="cartao aviso">${esc(erroAmigavel(e))}</div>`; });
 }
 
@@ -109,10 +110,28 @@ function progressoNivel() {
   return { prox, pct, falta: prox ? Math.max(0, prox.xp_necessario - p.xp) : 0 };
 }
 
+const ORDEM_CAT = ['jogo', 'experiencia', 'bebida', 'personalizado', 'comida', 'kids'];
+const ROTULO_SECAO = { jogo: 'Jogos e mesas', experiencia: 'Experiências', bebida: 'Bebidas', personalizado: 'Monte o seu', comida: 'Para comer', kids: 'Kids' };
+const ARTE_JOGO = ['a', 'b', 'c', 'd'];
+const ehJogo = i => i.categoria === 'jogo' || i.categoria === 'experiencia';
+const ordemCat = (a, b) => (ORDEM_CAT.indexOf(a) + 100) % 100 - (ORDEM_CAT.indexOf(b) + 100) % 100;
+
+function tileJogo(i, n = 0) {
+  return `
+    <article class="tile inclina arte-${ARTE_JOGO[n % ARTE_JOGO.length]}" data-busca="${esc((i.nome + ' jogo ' + (CATEGORIAS[i.categoria] || '')).toLowerCase())}">
+      <div class="tile-brilho"></div>
+      <div class="tile-icone">${ICONE_CAT[i.categoria] || '🎲'}</div>
+      <h3>${esc(i.nome)}</h3>
+      ${i.faccao ? `<span class="chip ${i.faccao}">${NOME_FACCAO[i.faccao]}</span>` : ''}
+      <div class="tile-rodape"><span class="preco">${fmtAC(i.preco_ac)}</span>
+        <button class="botao pequeno primario" data-add="${i.id}">Jogar</button></div>
+    </article>`;
+}
+
 function cartaoItem(i, compacto = false) {
   const pers = i.categoria === 'personalizado';
   return `
-    <div class="cartao item ${compacto ? 'compacto' : ''}" data-busca="${esc((i.nome + ' ' + (CATEGORIAS[i.categoria] || i.categoria)).toLowerCase())}">
+    <div class="cartao item inclina ${compacto ? 'compacto' : ''}" data-busca="${esc((i.nome + ' ' + (CATEGORIAS[i.categoria] || i.categoria)).toLowerCase())}">
       <div class="item-icone">${ICONE_CAT[i.categoria] || '🍽️'}</div>
       <div class="item-corpo">
         <h3>${esc(i.nome)}</h3>
@@ -129,74 +148,95 @@ async function vInicio() {
   const rank = p.faccao ? `${NOME_FACCAO[p.faccao]} · Nível ${p.nivel}` : 'Iniciado · Nível 0';
   const placar = await sb.from('placar_guerra').select('*').then(r => r.error ? [] : r.data, () => []);
   const maxPts = Math.max(1, ...placar.map(l => Number(l.pontos)));
-  const destaques = ['comida', 'bebida', 'jogo'].map(c => S.cardapio.find(i => i.categoria === c)).filter(Boolean);
+  const jogos = S.cardapio.filter(ehJogo);
   const abertos = S.itens.filter(i => i.status !== 'entregue');
+  const hora = new Date().getHours();
+  const saudacao = hora < 12 ? 'Bom dia' : hora < 18 ? 'Boa tarde' : 'Boa noite';
   return `
-    <section class="cartao heroi">
-      <div class="avatar ${p.faccao ? '' : 'iniciado'}">${SIGILO[p.faccao || 'iniciado']}</div>
-      <div>
-        <div class="titulo-rank">${rank}</div>
-        <h2>${esc(p.nome_exibicao)}</h2>
-        <p class="moedas">${fmtNum(p.saldo_ac)} <small>AC</small></p>
-        <button class="botao pequeno" data-ir="carteira">+ Carregar moedas</button>
-        ${p.saldo_ac < 0 ? '<small>A diferença é cobrada em reais no fechamento.</small>' : ''}
+    <section class="heroi grande">
+      <div class="heroi-fundo"><i></i><i></i><i></i></div>
+      <div class="heroi-topo">
+        <div class="anel-avatar">
+          <svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" class="anel-base"/><circle cx="50" cy="50" r="46" class="anel-prog" data-anel="${p.faccao ? pct : 0}"/></svg>
+          <div class="avatar ${p.faccao ? '' : 'iniciado'}">${SIGILO[p.faccao || 'iniciado']}</div>
+        </div>
+        <div>
+          <div class="titulo-rank">${rank}</div>
+          <h2>${saudacao}, ${esc(p.nome_exibicao.split(' ')[0])}</h2>
+          <small class="sub">${p.faccao ? (prox ? `Faltam ${fmtNum(falta)} XP para o nível ${prox.nivel}` : 'Nível máximo') : 'Faça o teste e escolha a sua casa'}</small>
+        </div>
       </div>
+      <div class="heroi-saldo">
+        <div><span class="rotulo">Seu saldo</span><p class="moedas"><span data-conta="${p.saldo_ac}">${fmtNum(p.saldo_ac)}</span> <small>AC</small></p></div>
+        <button class="botao primario" data-ir="carteira">+ Carregar</button>
+      </div>
+      ${p.saldo_ac < 0 ? '<small>A diferença é cobrada em reais no fechamento.</small>' : ''}
     </section>
+
+    ${!p.faccao ? `
+    <section class="cartao aviso cofre inclina">
+      <div class="tranca">🔒</div>
+      <h3>Cofre de Cristal</h3>
+      <div class="xp-pend"><span data-conta="${p.xp_bloqueado}">${fmtNum(p.xp_bloqueado)}</span> XP trancados</div>
+      <p class="sub" style="margin:6px 0 16px">Os deuses do Conclave ainda não conhecem a sua verdadeira natureza. Faça o Teste de Calibração e libere tudo.</p>
+      <button class="botao primario" data-ir="quiz">Iniciar o teste</button>
+    </section>` : ''}
+
+    <section>
+      <div class="linha secao-titulo"><h3>🎲 Jogue agora</h3><button class="botao pequeno" data-ir="cardapio">Ver todos</button></div>
+      ${jogos.length ? `<div class="carrossel">${jogos.map((j, n) => tileJogo(j, n)).join('')}</div>`
+        : '<div class="cartao"><p class="sub" style="margin:0">Os jogos da casa aparecem aqui assim que forem cadastrados.</p></div>'}
+    </section>
+
     <div class="atalhos">
       <button data-ir="cardapio">${ICONE.cardapio}<span>Pedir</span></button>
       <button data-ir="comanda">${ICONE.comanda}<span>Comanda</span></button>
       <button data-ir="carteira"><span class="ico-moeda">AC</span><span>Moedas</span></button>
       <button data-ir="guerra">${ICONE.guerra}<span>Guerra</span></button>
     </div>
-    ${p.faccao ? `
-    <section class="cartao xp-bloco">
-      <div class="linha"><h3>Nível ${p.nivel}</h3><small class="preco">${fmtNum(p.xp)} XP</small></div>
-      <div class="barra" style="margin:10px 0 6px"><i style="width:${pct}%"></i></div>
-      <small>${prox ? `Faltam ${fmtNum(falta)} XP para o nível ${prox.nivel}` : 'Nível máximo'}</small>
-    </section>` : `
-    <section class="cartao aviso cofre">
-      <div class="tranca">🔒</div>
-      <h3>Cofre de Cristal</h3>
-      <div class="xp-pend">${fmtNum(p.xp_bloqueado)} XP trancados</div>
-      <p class="sub" style="margin:6px 0 16px">Os deuses do Conclave ainda não conhecem a sua verdadeira natureza. Faça o Teste de Calibração e libere tudo.</p>
-      <button class="botao primario" data-ir="quiz">Iniciar o teste</button>
-    </section>`}
+
     ${abertos.length ? `
     <section class="cartao">
       <div class="linha"><h3>Seus pedidos agora</h3><button class="botao pequeno" data-ir="comanda">Ver tudo</button></div>
       ${abertos.slice(0, 3).map(i => `<div class="linha mini-pedido"><span>${i.quantidade}× ${esc(i.cardapio?.nome || 'Item')}</span><span class="chip ${i.status}">${ROTULO_STATUS[i.status] || i.status}</span></div>`).join('')}
     </section>` : ''}
-    ${destaques.length ? `
-    <section>
-      <div class="linha secao-titulo"><h3>Para começar</h3><button class="botao pequeno" data-ir="cardapio">Cardápio completo</button></div>
-      ${destaques.map(i => cartaoItem(i, true)).join('')}
-    </section>` : ''}
+
     ${placar.length ? `
     <section class="cartao">
       <div class="linha"><h3>Guerra das casas</h3><button class="botao pequeno" data-ir="guerra">Ver placar</button></div>
       ${CASAS.map(c => { const l = placar.find(x => x.faccao === c); const pts = Number(l?.pontos || 0);
         return `<div class="mini-guerra ${c}"><span>${NOME_FACCAO[c]}</span><div class="barra"><i style="width:${(pts / maxPts) * 100}%"></i></div><b>${fmtNum(pts)}</b></div>`; }).join('')}
     </section>` : ''}
+
     ${S.cotas.length ? `<section class="cartao dourado"><h3>🐉 Covil do Dragão</h3>
       <p class="sub" style="margin:4px 0 12px">Você é da Sociedade Secreta. Veja suas cotas e rendimentos.</p>
       <button class="botao" data-ir="covil">Abrir o Covil</button></section>` : ''}
-    <section class="cartao">
-      <h3>Comanda</h3>
-      ${S.comanda
-        ? `<p>Mesa <strong>${esc(S.comanda.mesa)}</strong> · ${S.itens.length} item(ns) · <span class="preco">${fmtAC(totalComanda())}</span></p>
-           <button class="botao" data-ir="comanda">Ver comanda</button>`
-        : '<p class="sub">Nenhuma comanda aberta. Peça algo do cardápio para começar.</p><button class="botao primario" data-ir="cardapio">Ver cardápio</button>'}
+
+    <section class="cartao inclina">
+      <div class="linha"><h3>Sede ou fome?</h3><button class="botao pequeno" data-cat="bebida" data-ir="cardapio">Bebidas</button></div>
+      <p class="sub" style="margin:6px 0 0">${S.comanda
+        ? `Mesa <strong>${esc(S.comanda.mesa)}</strong> · ${S.itens.length} item(ns) · <span class="preco">${fmtAC(totalComanda())}</span>`
+        : 'Peça sem sair do jogo: o garçom leva até a sua mesa.'}</p>
     </section>`;
 }
 
 function vCardapio() {
-  const cats = ['todos', ...new Set(S.cardapio.map(i => i.categoria))];
+  const cats = [...new Set(S.cardapio.map(i => i.categoria))].sort(ordemCat);
   const lista = S.cardapio.filter(i => S.categoria === 'todos' || i.categoria === S.categoria);
+  const grupos = cats.filter(c => lista.some(i => i.categoria === c));
   return `
-    <input class="busca" id="busca" type="search" placeholder="Buscar no cardápio" autocomplete="off">
-    <div class="categorias">${cats.map(c =>
+    <div class="cardapio-topo">
+      <h2>O que vamos jogar?</h2>
+      <input class="busca" id="busca" type="search" placeholder="Buscar jogo, bebida ou prato" autocomplete="off">
+    </div>
+    <div class="categorias">${['todos', ...cats].map(c =>
       `<button class="botao pequeno ${c === S.categoria ? 'ativo' : ''}" data-cat="${esc(c)}">${c === 'todos' ? 'Tudo' : `${ICONE_CAT[c] || ''} ${esc(CATEGORIAS[c] || c)}`}</button>`).join('')}</div>
-    ${lista.length ? lista.map(i => cartaoItem(i)).join('') : '<p class="vazio">Cardápio vazio. Peça ao administrador para cadastrar os itens.</p>'}
+    ${grupos.length ? grupos.map(c => {
+      const itens = lista.filter(i => i.categoria === c);
+      return `<section class="secao-cardapio" data-secao>
+        <h3 class="secao-nome">${ICONE_CAT[c] || ''} ${esc(ROTULO_SECAO[c] || c)}</h3>
+        ${ehJogo(itens[0]) ? `<div class="grade-jogos">${itens.map((j, n) => tileJogo(j, n)).join('')}</div>` : itens.map(i => cartaoItem(i)).join('')}
+      </section>`; }).join('') : '<p class="vazio">Cardápio vazio. Peça ao administrador para cadastrar os itens.</p>'}
     <p class="vazio" id="sem-resultado" hidden>Nada encontrado com essa busca.</p>`;
 }
 
@@ -544,7 +584,7 @@ async function adicionar(item, detalhes = null) {
   const { error } = await sb.rpc('adicionar_item', { _comanda: id, _item_cardapio: item.id, _quantidade: 1, _detalhes: detalhes });
   if (error) throw error;
   await carregarComanda();
-  toast(`${item.nome} pedido!`);
+  feedback({ icone: ehJogo(item) ? '🎲' : '✓', titulo: ehJogo(item) ? 'Bora jogar!' : 'Pedido enviado!', sub: item.nome });
   desenhar();
 }
 
@@ -617,11 +657,12 @@ raiz.addEventListener('click', e => {
   });
   if (t.dataset.quiz === 'comecar') { S.quiz.comecou = true; return desenhar(); }
   if (t.dataset.tela) return ir(t.dataset.tela);
+  if (t.dataset.cat && t.dataset.ir) { S.categoria = t.dataset.cat; return ir(t.dataset.ir); }
   if (t.dataset.ir) return ir(t.dataset.ir);
   if (t.dataset.cat) { S.categoria = t.dataset.cat; return desenhar(); }
   if (t.dataset.add) {
     const item = S.cardapio.find(i => i.id === t.dataset.add);
-    return item.categoria === 'personalizado' ? montarPersonalizado(item) : comTrava(t, () => adicionar(item));
+    return item.categoria === 'personalizado' ? montarPersonalizado(item) : comTrava(t, async () => { voarParaComanda(t); await adicionar(item); });
   }
   if (t.dataset.resp) { const [i, f] = t.dataset.resp.split('|'); t.classList.add('marcado'); return comTrava(t, () => responderQuiz(Number(i), f)); }
   if (t.dataset.faccao) return comTrava(t, () => confirmarFaccao(t.dataset.faccao));
@@ -632,10 +673,12 @@ raiz.addEventListener('click', e => {
 });
 
 document.addEventListener('click', e => { if (e.target.closest('[data-fechar-rev]')) fecharRevelacao(); });
+ligarInclinacao(); ligarOnda();
 document.addEventListener('input', e => {
   if (e.target.id !== 'busca') return;
   const q = e.target.value.trim().toLowerCase(); let n = 0;
-  $$('#main .item[data-busca]').forEach(el => { const ok = !q || el.dataset.busca.includes(q); el.hidden = !ok; if (ok) n++; });
+  $$('#main [data-busca]').forEach(el => { const ok = !q || el.dataset.busca.includes(q); el.hidden = !ok; if (ok) n++; });
+  $$('#main [data-secao]').forEach(sec => { sec.hidden = !sec.querySelector('[data-busca]:not([hidden])'); });
   const sr = $('#sem-resultado'); if (sr) sr.hidden = n > 0;
 });
 
@@ -675,8 +718,17 @@ raiz.addEventListener('submit', async e => {
 
 /* ---------- tempo real ---------- */
 function assinarTempoReal() {
-  const atualizar = async () => {
+  const AVISO = { preparando: ['👨‍🍳', 'Estamos preparando!'], pronto: ['🔔', 'Seu pedido está pronto!'], entregue: ['✅', 'Pedido entregue. Bom proveito!'] };
+  const atualizar = async payload => {
     try {
+      const novo = payload?.new;
+      if (payload?.eventType === 'UPDATE' && novo?.status && AVISO[novo.status] && novo.status !== payload.old?.status) {
+        await carregarComanda();
+        const meu = S.itens.find(i => i.id === novo.id);
+        if (meu) { const [icone, titulo] = AVISO[novo.status];
+          feedback({ icone, titulo, sub: meu.cardapio?.nome || '', tipo: novo.status === 'pronto' ? 'ok' : 'info', ms: novo.status === 'pronto' ? 2600 : 1800 });
+          if (novo.status === 'pronto') vibrar([120, 60, 120]); }
+      }
       await carregarComanda(); await recarregarPerfil();
       if (['inicio', 'comanda'].includes(S.tela)) desenhar();   // só redesenha onde nada está sendo digitado
       else if ($('#saldo')) { $('#saldo').textContent = fmtAC(S.perfil.saldo_ac); }

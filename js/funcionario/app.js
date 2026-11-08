@@ -2,10 +2,12 @@
 import { sb, configurado, $, $$, esc, fmtNum, fmtReais, fmtAC, toast, abrirModal, fecharModal, avisoSemConfig,
          comTrava, erroAmigavel, tempoDecorrido, contem, partir, NOME_FACCAO } from '../nucleo.js';
 import { sessaoAtual, montarLogin, sair, validarSenha } from '../auth.js';
+import { entrada, ligarOnda, animarNumeros } from '../cliente/efeitos.js';
 
 const raiz = document.getElementById('app');
 const ok = r => { if (r.error) throw r.error; return r.data; };
-const CATEGORIAS = ['comida', 'bebida', 'jogo', 'kids', 'personalizado'];
+const CATEGORIAS = ['comida', 'bebida', 'jogo', 'experiencia', 'kids', 'personalizado'];
+const ROT = { pendente: 'Pendente', preparando: 'Preparando', pronto: 'Pronto', entregue: 'Entregue' };
 const PACOTES = [[30, 30], [50, 55], [100, 115], [200, 240]];   // R$ → AC (com bônus)
 
 const E = { user: null, perfil: null, papeis: [], aba: null, subAdmin: 'cardapio' };
@@ -13,12 +15,41 @@ let iniciado = false;
 const tem = p => E.papeis.includes(p) || E.papeis.includes('admin');
 
 /* ---------- estrutura ---------- */
+// Estações de produção: cada pedido vai para a fila da estação da sua categoria
+const ESTACOES = {
+  cozinha: { nome: 'Cozinha', icone: '👨‍🍳', cor: '#f59e0b', titulo: 'Fila da cozinha', vazio: 'Cozinha limpa. Nenhum prato na fila.',
+    acao: { pendente: ['Começar a preparar', 'preparando'], preparando: ['Prato pronto', 'pronto'] } },
+  bar: { nome: 'Bar', icone: '🍹', cor: '#38bdf8', titulo: 'Fila do bar', vazio: 'Nenhuma bebida na fila.',
+    acao: { pendente: ['Começar a servir', 'preparando'], preparando: ['Bebida pronta', 'pronto'] } },
+  jogos: { nome: 'Jogos', icone: '🎲', cor: '#a78bfa', titulo: 'Mesa de jogos', vazio: 'Nenhum jogo ou mesa pedidos agora.',
+    acao: { pendente: ['Separar o jogo', 'preparando'], preparando: ['Pronto na mesa', 'pronto'] } },
+};
+const estacaoDe = cat => (['bebida'].includes(cat) ? 'bar' : ['jogo', 'experiencia'].includes(cat) ? 'jogos' : 'cozinha');
+
 function abasDisponiveis() {
   const a = [];
-  if (tem('garcom')) a.push(['salao', '🍽️ Salão']);
-  if (tem('cozinha')) a.push(['cozinha', '👨‍🍳 Cozinha']);
-  if (tem('admin')) a.push(['admin', '⚙️ Admin']);
+  if (tem('garcom')) a.push(['salao', '🍽️', 'Salão']);
+  if (tem('cozinha')) for (const [id, e] of Object.entries(ESTACOES)) a.push([id, e.icone, e.nome]);
+  if (tem('admin')) a.push(['admin', '⚙️', 'Admin']);
   return a;
+}
+
+let contagens = {};
+async function atualizarContagens() {
+  try {
+    const itens = ok(await sb.from('itens_comanda').select('status, cardapio(categoria), comandas!inner(status)')
+      .in('status', ['pendente', 'preparando', 'pronto']).eq('comandas.status', 'aberta'));
+    const c = { salao: 0, cozinha: 0, bar: 0, jogos: 0 };
+    for (const i of itens) {
+      if (i.status === 'pronto') c.salao++;
+      else c[estacaoDe(i.cardapio?.categoria)]++;
+    }
+    contagens = c;
+    $$('#abas [data-aba]').forEach(b => {
+      const n = contagens[b.dataset.aba] || 0, cnt = b.querySelector('.cont');
+      if (cnt) { cnt.textContent = n; cnt.hidden = !n; }
+    });
+  } catch { /* silencioso */ }
 }
 
 function desenhar() {
@@ -27,16 +58,19 @@ function desenhar() {
   if (!$('#conteudo')) {
     raiz.innerHTML = `
       <header class="barra-topo">
-        <div class="linha"><strong>⚔️ O Conclave · Equipe</strong>
-          <span><small>${esc(E.perfil.nome_exibicao)}</small> <button class="botao pequeno" data-acao="senha">Senha</button> <button class="botao pequeno" data-acao="sair">Sair</button></span></div>
+        <div class="linha"><strong class="marca-equipe"><i></i> O CONCLAVE <small>EQUIPE</small></strong>
+          <span class="quem"><small>${esc(E.perfil.nome_exibicao)}</small>
+            <button class="botao pequeno" data-acao="senha">Senha</button>
+            <button class="botao pequeno" data-acao="sair">Sair</button></span></div>
         <nav class="abas" id="abas"></nav>
       </header>
       <main id="conteudo"></main>`;
   }
-  $('#abas').innerHTML = abas.map(([id, nome]) =>
-    `<button class="botao ${id === E.aba ? 'ativo' : ''}" data-aba="${id}">${nome}</button>`).join('');
-  const vistas = { salao: vSalao, cozinha: vCozinha, admin: vAdmin };
-  Promise.resolve(vistas[E.aba]()).then(html => { if ($('#conteudo')) $('#conteudo').innerHTML = html; })
+  $('#abas').innerHTML = abas.map(([id, ic, nome]) =>
+    `<button class="botao aba ${id === E.aba ? 'ativo' : ''}" data-aba="${id}"><span class="aba-ic">${ic}</span>${nome}<b class="cont" hidden>${contagens[id] || ''}</b></button>`).join('');
+  $$('#abas .cont').forEach(c => { c.hidden = !c.textContent; });
+  const vistas = { salao: vSalao, cozinha: () => vEstacao('cozinha'), bar: () => vEstacao('bar'), jogos: () => vEstacao('jogos'), admin: vAdmin };
+  Promise.resolve(vistas[E.aba]()).then(html => { const c = $('#conteudo'); if (c) { c.innerHTML = html; entrada(c); animarNumeros(c); } atualizarContagens(); })
     .catch(e => { $('#conteudo').innerHTML = `<div class="cartao aviso">${esc(erroAmigavel(e))}</div>`; });
 }
 
@@ -71,7 +105,7 @@ function cardComanda(c) {
           <div>${i.quantidade}× ${esc(i.cardapio?.nome)}
             ${i.detalhes_personalizados?.adicionais?.length ? `<div class="detalhe">+ ${esc(i.detalhes_personalizados.adicionais.join(', '))}</div>` : ''}
             ${i.detalhes_personalizados?.observacao ? `<div class="detalhe">Obs: ${esc(i.detalhes_personalizados.observacao)}</div>` : ''}</div>
-          <span><span class="chip ${i.status}">${i.status}</span>
+          <span><span class="chip ${i.status}">${ROT[i.status] || i.status}</span>
             ${i.status === 'pronto' ? `<button class="botao pequeno" data-item-status="${i.id}|entregue">Entregue</button>` : ''}</span>
         </div>`).join('') : '<p class="sub">Sem itens.</p>'}</div>
       <div class="linha"><strong>Total ${fmtReais(total)}</strong><small>${fmtAC(total)}</small></div>
@@ -160,28 +194,42 @@ async function modalKids(comandaId, usuarioId) {
 }
 
 /* ================= COZINHA ================= */
-async function vCozinha() {
-  const itens = ok(await sb.from('itens_comanda')
-    .select('*, cardapio(nome), comandas!inner(mesa, status)')
-    .in('status', ['pendente', 'preparando']).eq('comandas.status', 'aberta').order('criado_em'));
+async function vEstacao(chave) {
+  const est = ESTACOES[chave];
+  const todos = ok(await sb.from('itens_comanda')
+    .select('*, cardapio(nome, categoria), comandas!inner(mesa, status)')
+    .in('status', ['pendente', 'preparando', 'pronto']).eq('comandas.status', 'aberta').order('criado_em'));
+  const itens = todos.filter(i => estacaoDe(i.cardapio?.categoria) === chave);
+  const col = st => itens.filter(i => i.status === st);
+  const ticket = i => `
+    <div class="ticket ${i.status} ${i.status === 'pendente' && Date.now() - new Date(i.criado_em) > 10 * 60000 ? 'atrasado' : ''}">
+      <div class="linha"><h3>${i.quantidade}× ${esc(i.cardapio?.nome)}</h3><span class="mesa-selo">Mesa ${esc(i.comandas?.mesa)}</span></div>
+      <small>há ${tempoDecorrido(i.criado_em)}</small>
+      ${i.detalhes_personalizados?.adicionais?.length ? `<p class="detalhe">+ ${esc(i.detalhes_personalizados.adicionais.join(', '))}</p>` : ''}
+      ${i.detalhes_personalizados?.observacao ? `<p class="detalhe">Obs: ${esc(i.detalhes_personalizados.observacao)}</p>` : ''}
+      ${est.acao[i.status]
+        ? `<button class="botao primario" data-item-status="${i.id}|${est.acao[i.status][1]}">${est.acao[i.status][0]}</button>`
+        : `<button class="botao" style="width:100%" data-item-status="${i.id}|entregue">Entregue na mesa</button>`}
+    </div>`;
+  const coluna = (titulo, st, cor) => `
+    <section class="coluna" style="--cor:${cor}">
+      <h3>${titulo} <b>${col(st).length}</b></h3>
+      ${col(st).length ? col(st).map(ticket).join('') : '<p class="vazio-col">—</p>'}
+    </section>`;
   return `
-    <h2>Fila da cozinha (${itens.length})</h2>
-    <div class="painel">${itens.length ? itens.map(i => `
-      <div class="cartao ticket ${i.status}">
-        <div class="linha"><h2 style="margin:0">${i.quantidade}× ${esc(i.cardapio?.nome)}</h2><span class="chip ${i.status}">${i.status}</span></div>
-        <p style="margin:4px 0">Mesa <strong>${esc(i.comandas?.mesa)}</strong> · há ${tempoDecorrido(i.criado_em)}</p>
-        ${i.detalhes_personalizados?.adicionais?.length ? `<p class="detalhe" style="font-size:1rem">+ ${esc(i.detalhes_personalizados.adicionais.join(', '))}</p>` : ''}
-        ${i.detalhes_personalizados?.observacao ? `<p class="detalhe" style="font-size:1rem">Obs: ${esc(i.detalhes_personalizados.observacao)}</p>` : ''}
-        ${i.status === 'pendente'
-          ? `<button class="botao primario" data-item-status="${i.id}|preparando">Começar a preparar</button>`
-          : `<button class="botao primario" data-item-status="${i.id}|pronto">Pronto</button>`}
-      </div>`).join('') : '<p class="vazio">Nada na fila. 🎉</p>'}</div>`;
+    <div class="estacao-topo" style="--cor:${est.cor}">
+      <div class="estacao-icone">${est.icone}</div>
+      <div><h2>${est.titulo}</h2><small>${col('pendente').length} novos · ${col('preparando').length} em andamento · ${col('pronto').length} prontos</small></div>
+    </div>
+    ${itens.length ? `<div class="kanban">
+      ${coluna('Novos', 'pendente', '#f59e0b')}${coluna('Em andamento', 'preparando', '#38bdf8')}${coluna('Prontos', 'pronto', '#22c55e')}
+    </div>` : `<p class="vazio grande">${est.vazio} 🎉</p>`}`;
 }
 
 /* ================= ADMIN ================= */
 async function vAdmin() {
   const sub = E.subAdmin;
-  const menu = `<div class="abas" style="margin-bottom:12px">${[['cardapio', 'Cardápio'], ['regras', 'Regras e níveis'], ['pacotes', 'Pacotes'], ['pesquisa', 'Jogadores'], ['investidores', 'Investidores'], ['equipe', 'Equipe']]
+  const menu = `<div class="abas sub-abas" style="margin-bottom:14px">${[['cardapio', '📋 Cardápio'], ['regras', '📈 Regras e níveis'], ['pacotes', '💳 Pacotes'], ['pesquisa', '🎮 Jogadores'], ['investidores', '🐉 Investidores'], ['equipe', '👥 Equipe']]
     .map(([id, n]) => `<button class="botao pequeno ${sub === id ? 'ativo' : ''}" data-sub="${id}">${n}</button>`).join('')}</div>`;
   if (sub === 'cardapio') return menu + await adminCardapio();
   if (sub === 'regras') return menu + await adminRegras();
@@ -414,10 +462,40 @@ raiz.addEventListener('submit', e => {
 });
 
 /* ---------- tempo real ---------- */
+let audio = null;
+function bip() {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine'; o.frequency.value = 880; g.gain.value = .15; o.connect(g); g.connect(audio.destination);
+    o.start(); g.gain.exponentialRampToValueAtTime(.001, audio.currentTime + .35); o.stop(audio.currentTime + .4);
+    navigator.vibrate?.([80, 40, 80]);
+  } catch { /* sem áudio: segue */ }
+}
+document.addEventListener('pointerdown', () => { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume?.(); } catch {} }, { once: true });
+
 function assinarTempoReal() {
-  const atualizar = () => { if (['salao', 'cozinha'].includes(E.aba) && !$('#modal.aberto')) desenhar(); };
+  const telasVivas = ['salao', 'cozinha', 'bar', 'jogos'];
+  const atualizar = () => { if (telasVivas.includes(E.aba) && !$('#modal.aberto')) desenhar(); else atualizarContagens(); };
+  const novoPedido = async payload => {
+    try {
+      const it = payload.new;
+      const { data } = await sb.from('cardapio').select('nome, categoria').eq('id', it.item_cardapio_id).maybeSingle();
+      const est = estacaoDe(data?.categoria);
+      if (tem('cozinha')) {
+        bip(); toast(`${ESTACOES[est].icone} Novo pedido: ${it.quantidade}× ${data?.nome || 'item'}`);
+      }
+    } catch { /* silencioso */ }
+    atualizar();
+  };
+  const pronto = payload => {
+    if (payload.new?.status === 'pronto' && payload.old?.status !== 'pronto' && tem('garcom')) { bip(); toast('🔔 Pedido pronto para entregar.'); }
+    atualizar();
+  };
   sb.channel('equipe')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'itens_comanda' }, atualizar)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'itens_comanda' }, novoPedido)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'itens_comanda' }, pronto)
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'itens_comanda' }, atualizar)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas' }, atualizar)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'sessoes_kids' }, atualizar)
     .subscribe();
@@ -438,6 +516,7 @@ async function iniciar() {
   } catch (e) {
     raiz.innerHTML = `<div class="cartao aviso"><h2>Não deu para carregar</h2><p>${esc(erroAmigavel(e))}</p></div>`; return;
   }
+  ligarOnda();
   if (!abasDisponiveis().length) {
     raiz.innerHTML = `<div class="login"><h1>Sem acesso</h1><p class="sub">Seu login (${esc(E.user.email)}) ainda não tem papel de equipe. Peça ao administrador.</p>
       <button class="botao" id="sair">Sair</button></div>`;
