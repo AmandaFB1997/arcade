@@ -98,7 +98,7 @@ function desenhar() {
   cnt.hidden = S.itens.length === 0; cnt.textContent = S.itens.length;
   const vistas = { carteira: vCarteira, covil: vCovil, inicio: vInicio, cardapio: vCardapio, comanda: vComanda, guerra: vGuerra, perfil: vPerfil, quiz: vQuiz, mesa: vMesa };
   const tela = vistas[S.tela] || vInicio;
-  Promise.resolve(tela()).then(html => { const m = $('#main'); if (m) { m.innerHTML = html; entrada(m); animarNumeros(m); animarAneis(m); } })
+  Promise.resolve(tela()).then(html => { const m = $('#main'); if (m) { m.innerHTML = html; m.dataset.tela = S.tela; entrada(m); animarNumeros(m); animarAneis(m); } })
     .catch(e => { $('#main').innerHTML = `<div class="cartao aviso">${esc(erroAmigavel(e))}</div>`; });
 }
 

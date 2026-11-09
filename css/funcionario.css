@@ -86,3 +86,17 @@ body { background: radial-gradient(120% 70% at 50% -10%, #8b5cf622, transparent 
 .mini-placar span.lider { background: #ffd23f33; border: 1px solid #ffd23f88; }
 .partida { display: grid; gap: 6px; margin-bottom: 10px; } .partida .comentario { margin: 0; font-style: italic; } .partida audio { width: 100%; }
 .estrelas-leitura { color: #ffd23f; letter-spacing: 2px; }
+
+/* ===== RESPONSIVO — equipe (celular, tablet, desktop, tela grande) ===== */
+img, svg, video, audio { max-width: 100%; }
+@media (max-width: 600px) {
+  #app { padding-left: 10px; padding-right: 10px; }
+  .tabela { font-size: .8rem; } .tabela input, .tabela select { min-width: 110px; }
+  .mesas-grade { grid-template-columns: 1fr; }
+  .estacao-topo h2 { font-size: 1.1rem; }
+}
+@media (min-width: 1500px) {
+  #app { max-width: 1560px; }
+  .mesas-grade { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+}
+@media (max-height: 480px) and (orientation: landscape) { .barra-topo { position: static; } }
